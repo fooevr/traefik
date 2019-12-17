@@ -7,7 +7,7 @@ export GOPROXY=https://proxy.golang.org
 # List of bundles to create when no argument is passed
 DEFAULT_BUNDLES=(
 	generate
-	validate-lint
+	#validate-lint
 	binary
 
 	test-unit
