@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/binary"
+	_ "encoding/binary"
 	"fmt"
-	"github.com/containous/traefik/v2/pkg/cache"
+	_ "github.com/containous/traefik/v2/pkg/cache"
 	"github.com/containous/traefik/v2/pkg/config/dynamic"
 	"github.com/containous/traefik/v2/pkg/log"
 	"github.com/containous/traefik/v2/pkg/middlewares"
@@ -15,9 +15,9 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	dynamicProto "github.com/jhump/protoreflect/dynamic"
 	"github.com/opentracing/opentracing-go/ext"
-	"github.com/vulcand/oxy/buffer"
+	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
+	_ "google.golang.org/grpc/codes"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -34,10 +34,11 @@ type grpcHandle struct {
 	grpc     *grpc.Server
 	messages map[string]*desc.MessageDescriptor
 
-	rpcs        map[string]*desc.MethodDescriptor
-	cache       bool
-	ttl         time.Duration
-	incremental bool
+	rpcs            map[string]*desc.MethodDescriptor
+	cache           bool
+	ttl             time.Duration
+	incremental     bool
+	maxVersionCount int
 }
 
 // New creates a new handler.
@@ -53,6 +54,9 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 		cache:       config.Cache,
 		ttl:         time.Millisecond * time.Duration(config.TTL),
 		incremental: config.Incremental,
+	}
+	if config.MaxVersionCount == 0 {
+		result.maxVersionCount = 200
 	}
 	fs := new(descriptor.FileDescriptorSet)
 	descBytes, _ := base64.StdEncoding.DecodeString(config.Desc)
@@ -111,21 +115,21 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		rw.WriteHeader(400)
 		return
 	}
-	cacheId := base64.StdEncoding.EncodeToString(frame)
-	cache.CacheManager.GetCahe(cacheId, a.ttl, a.incremental)
-
-	buffer := &bytes.Buffer{}
-	buffer.Write([]byte{0})
-	length := make([]byte, 4)
-	binary.BigEndian.PutUint32(length, uint32(len(cache)-5))
-	buffer.Write(length)
-	buffer.Write(cache[5:])
-	rw.Write(buffer.Bytes())
-	rw.Header().Add("Content-Type", "application/grpc")
-	rw.Header().Add("Grpc-Accept-Encoding", "gzip")
-	rw.Header().Add("Grpc-Encoding", "identity")
-	rw.Header().Add("Trailer:Grpc-Status", codes.OK.String())
-	return
+	//cacheId := base64.StdEncoding.EncodeToString(frame)
+	//cache.CacheManager.GetCahe(cacheId, a.ttl, a.incremental)
+	//
+	//buffer := &bytes.Buffer{}
+	//buffer.Write([]byte{0})
+	//length := make([]byte, 4)
+	//binary.BigEndian.PutUint32(length, uint32(len(cache)-5))
+	//buffer.Write(length)
+	//buffer.Write(cache[5:])
+	//rw.Write(buffer.Bytes())
+	//rw.Header().Add("Content-Type", "application/grpc")
+	//rw.Header().Add("Grpc-Accept-Encoding", "gzip")
+	//rw.Header().Add("Grpc-Encoding", "identity")
+	//rw.Header().Add("Trailer:Grpc-Status", codes.OK.String())
+	//return
 
 	req.Body = ioutil.NopCloser(bytes.NewReader(bts))
 	newRw := cacheResponse{
@@ -134,7 +138,6 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		buffer:       &bytes.Buffer{},
 	}
 	a.next.ServeHTTP(newRw, req)
-	cache = newRw.buffer.Bytes()
 }
 
 type cacheResponse struct {

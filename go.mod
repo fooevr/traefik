@@ -34,6 +34,7 @@ require (
 	github.com/donovanhide/eventsource v0.0.0-20170630084216-b8f31a59085e // indirect
 	github.com/eapache/channels v1.1.0
 	github.com/elazarl/go-bindata-assetfs v1.0.0
+	github.com/emirpasic/gods v1.12.0
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/fatih/structs v1.1.0
 	github.com/felixge/httpsnoop v1.0.0 // indirect
@@ -42,7 +43,6 @@ require (
 	github.com/go-acme/lego/v3 v3.2.0
 	github.com/go-check/check v0.0.0-00010101000000-000000000000
 	github.com/go-kit/kit v0.9.0
-	github.com/gogo/protobuf v1.2.0
 	github.com/golang/protobuf v1.3.2
 	github.com/google/go-github/v28 v28.0.0
 	github.com/googleapis/gnostic v0.1.0 // indirect
