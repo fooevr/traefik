@@ -355,7 +355,10 @@ type Retry struct {
 }
 
 type GRPCHandler struct {
-	Desc string `json:"desc,omitempty" toml:"desc,omitempty" yaml:"desc,omitempty" export:"true"`
+	Desc        string `json:"desc,omitempty" toml:"desc,omitempty" yaml:"desc,omitempty" export:"true"`
+	Cache       bool   `json:"cache,omitempty" toml:"cache,omitempty" yaml:"cache,omitempty" export:"true"`
+	TTL         int64  `json:"ttl,omitempty" toml:"ttl,omitempty" yaml:"ttl,omitempty" export:"true"`
+	Incremental bool   `json:"incremental,omitempty" toml:"incremental,omitempty" yaml:"incremental,omitempty" export:"true"`
 }
 
 // +k8s:deepcopy-gen=true
