@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package com.variflight.middleware.gateway.cache;
+
+message ChangeMeta{
+    map<int32, ChangeMeta> fields = 1;
+    map<int32, ChangeMeta> map_int32 = 2;
+    map<int64, ChangeMeta> map_int64 = 3;
+    map<bool, ChangeMeta> map_bool = 4;
+    map<string, ChangeMeta> map_string = 5;
+    enum ChangeType{
+        unchanged = 0;
+        created = 1;
+        updated = 2;
+        deleted = 3;
+    }
+    ChangeType type = 6;
+}

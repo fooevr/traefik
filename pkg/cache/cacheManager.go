@@ -1,6 +1,7 @@
 package cache
 
 import (
+	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
 	"github.com/jhump/protoreflect/dynamic"
 	gca "github.com/patrickmn/go-cache"
@@ -30,7 +31,7 @@ func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit 
 	return cd.(*cacheItem).val.([]byte), hit
 }
 
-func (m *cacheManager) GetVersionCache(id string, version int64, ttl int64) (msg *dynamic.Message, changeDesc *change, hit bool) {
+func (m *cacheManager) GetVersionCache(id string, version int64, ttl int64) (msg *dynamic.Message, changeDesc *com_variflight_middleware_gateway_cache.ChangeMeta, hit bool) {
 	cd, hit := m.c.Get(id)
 	if !hit {
 		return nil, nil, false
@@ -41,10 +42,9 @@ func (m *cacheManager) GetVersionCache(id string, version int64, ttl int64) (msg
 	}
 	cursorIdx := cd.(*cacheItem).versions.IndexOf(version)
 	if cursorIdx < 0 {
-		return cd.(*cacheItem).val.(*dynamic.Message), &change{}, true
+		return cd.(*cacheItem).val.(*dynamic.Message), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, true
 	}
 	resultData := dynamic.NewMessage(cd.(*cacheItem).val.(*dynamic.Message).GetMessageDescriptor())
-	resultChange := &change{changeType: ChangeType_NoChange}
 	for i := cursorIdx; i < cd.(*cacheItem).versions.Size(); i++ {
 		version, ok := cd.(*cacheItem).versions.Get(i)
 		if !ok {
@@ -53,6 +53,13 @@ func (m *cacheManager) GetVersionCache(id string, version int64, ttl int64) (msg
 		cacheChange, ok := cd.(*cacheItem).c.Get(strconv.FormatInt(version.(int64), 10))
 		if !ok {
 			log.Panic("缓存和版本索引不匹配")
+		}
+		if cacheChange.(*com_variflight_middleware_gateway_cache.ChangeMeta).Type == com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
+			continue
+		}
+		if cacheChange.(*com_variflight_middleware_gateway_cache.ChangeMeta).Type == com_variflight_middleware_gateway_cache.ChangeMeta_created {
+			resultData = cd.(*cacheItem).val.(*dynamic.Message)
+
 		}
 		versionChange := cacheChange.(*change)
 		if versionChange.changeType == ChangeType_Create {
