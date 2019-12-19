@@ -38,6 +38,8 @@ import (
 )
 
 func main() {
+	//cache.Test()
+
 	// traefik config inits
 	tConfig := cmd.NewTraefikConfiguration()
 

@@ -3,6 +3,7 @@ package cache
 import (
 	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
+	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	gca "github.com/patrickmn/go-cache"
 	"log"
@@ -17,6 +18,8 @@ type cacheItem struct {
 	val           interface{}
 	versions      *sll.List
 	locker        *sync.RWMutex
+	messageDesc   *desc.MessageDescriptor
+	ttl           int64
 }
 
 type cacheManager struct {
@@ -28,53 +31,62 @@ func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit 
 	if ext.Unix() < time.Now().Unix() {
 		return nil, false
 	}
-	return cd.(*cacheItem).val.([]byte), hit
+	return cd.([]byte), hit
 }
 
-func (m *cacheManager) GetVersionCache(id string, version int64, ttl int64) (msg *dynamic.Message, changeDesc *com_variflight_middleware_gateway_cache.ChangeMeta, hit bool) {
+func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, changeDesc *com_variflight_middleware_gateway_cache.ChangeMeta, newVersion int64, hit bool) {
 	cd, hit := m.c.Get(id)
 	if !hit {
-		return nil, nil, false
+		return nil, nil, 0, false
 	}
+	ci := cd.(*cacheItem)
 	now := time.Now().Unix()
-	if cd.(*cacheItem).latestVersion+ttl < now {
-		return nil, nil, false
+	if ci.latestVersion+ci.ttl < now {
+		return nil, nil, 0, false
 	}
-	cursorIdx := cd.(*cacheItem).versions.IndexOf(version)
+	if ci.val == nil {
+		return nil, &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}, ci.latestVersion, true
+	}
+	cursorIdx := ci.versions.IndexOf(version)
 	if cursorIdx < 0 {
-		return cd.(*cacheItem).val.(*dynamic.Message), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, true
+		return cd.(*cacheItem).val.(*dynamic.Message), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, ci.latestVersion, true
 	}
-	resultData := dynamic.NewMessage(cd.(*cacheItem).val.(*dynamic.Message).GetMessageDescriptor())
-	for i := cursorIdx; i < cd.(*cacheItem).versions.Size(); i++ {
-		version, ok := cd.(*cacheItem).versions.Get(i)
+	resultData := dynamic.NewMessage(ci.messageDesc)
+	resultChange := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}
+	for i := cursorIdx + 1; i < ci.versions.Size(); i++ {
+		version, ok := ci.versions.Get(i)
 		if !ok {
 			log.Panic("缓存和版本索引不匹配")
 		}
-		cacheChange, ok := cd.(*cacheItem).c.Get(strconv.FormatInt(version.(int64), 10))
+		cacheChange, ok := ci.c.Get(strconv.FormatInt(version.(int64), 10))
+		change := cacheChange.(*com_variflight_middleware_gateway_cache.ChangeMeta)
 		if !ok {
 			log.Panic("缓存和版本索引不匹配")
 		}
-		if cacheChange.(*com_variflight_middleware_gateway_cache.ChangeMeta).Type == com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
+		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
 			continue
 		}
-		if cacheChange.(*com_variflight_middleware_gateway_cache.ChangeMeta).Type == com_variflight_middleware_gateway_cache.ChangeMeta_created {
-			resultData = cd.(*cacheItem).val.(*dynamic.Message)
-
+		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created ||
+			change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
+			resultData = ci.val.(*dynamic.Message)
+			if resultData == nil {
+				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}
+			} else {
+				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}
+			}
+			break
 		}
-		versionChange := cacheChange.(*change)
-		if versionChange.changeType == ChangeType_Create {
-			return cd.(*cacheItem).val.(*dynamic.Message), &change{changeType: ChangeType_Create}, true
-		}
-		changePartMessage(cd.(*cacheItem).val.(*dynamic.Message), resultData, versionChange, resultChange)
+		getIncrementalMessage(ci.val.(*dynamic.Message), resultData, change)
+		getIncrementalChange(resultChange, change)
 	}
-	return resultData, resultChange, true
+	return resultData, resultChange, ci.latestVersion, true
 }
 
 func (m *cacheManager) SetNoVersionCache(id string, data []byte, ttl int64) {
-	m.c.Set(id, data, time.Duration(ttl)*time.Second)
+	m.c.Set(id, data, time.Duration(ttl)*time.Millisecond)
 }
 
-func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.Message, ttl int64) {
+func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.Message, messageDesc *desc.MessageDescriptor, ttl int64) {
 	ci, hit := m.c.Get(id)
 	if !hit {
 		ci = &cacheItem{
@@ -83,26 +95,44 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 			versions:      sll.New(),
 			val:           data,
 			locker:        new(sync.RWMutex),
+			messageDesc:   messageDesc,
+			ttl:           ttl / 1000,
 		}
 		ci.(*cacheItem).c.OnEvicted(func(s string, i interface{}) {
 			versions := ci.(*cacheItem).versions
 			versions.Remove(versions.IndexOf(s))
 		})
-		m.c.Set(id, ci, 0)
-	} else {
-		fullMessage := ci.(*cacheItem).val.(*dynamic.Message)
-		if fullMessage == nil && data != nil {
-			ci.(*cacheItem).val = data
+		change := &com_variflight_middleware_gateway_cache.ChangeMeta{}
+		if data == nil {
+			change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_deleted
 		} else {
-			change, changeDesc := mergeMessage(fullMessage, data)
-			if !change {
-				ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), nil, time.Millisecond*time.Duration(ttl))
-			} else {
-				ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), changeDesc, 0)
-			}
+			change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_created
 		}
 		ci.(*cacheItem).versions.Add(version)
-		ci.(*cacheItem).latestVersion = version
+		ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), change, 0)
+		m.c.Set(id, ci, 0)
+	} else {
+		if ci.(*cacheItem).val == nil && data == nil {
+			ci.(*cacheItem).latestVersion = version
+			ci.(*cacheItem).versions.Add(version)
+			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}, 0)
+		} else if ci.(*cacheItem).val == nil && data != nil {
+			ci.(*cacheItem).val = data
+			ci.(*cacheItem).latestVersion = version
+			ci.(*cacheItem).versions.Add(version)
+			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, 0)
+		} else if ci.(*cacheItem).val != nil && data == nil {
+			ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}, 0)
+			ci.(*cacheItem).versions.Add(version)
+			ci.(*cacheItem).latestVersion = version
+			ci.(*cacheItem).val = nil
+		} else {
+			fullMessage := ci.(*cacheItem).val.(*dynamic.Message)
+			changeDesc := mergeAndDiffMessage(fullMessage, data)
+			ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), changeDesc, 0)
+			ci.(*cacheItem).versions.Add(version)
+			ci.(*cacheItem).latestVersion = version
+		}
 	}
 }
 
