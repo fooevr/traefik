@@ -21,8 +21,6 @@ import (
 	gca "github.com/patrickmn/go-cache"
 	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	_ "google.golang.org/grpc/codes"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -109,6 +107,7 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	var clientVersion int64
 	if req.Header.Get("ts") == "" {
+		rw.Write([]byte("miss ts field in request headers."))
 		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -135,102 +134,113 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		rw.WriteHeader(400)
 		return
 	}
-	cacheId := base64.StdEncoding.EncodeToString(frame)
+	cacheIdBuffer := &bytes.Buffer{}
+	cacheIdBuffer.Write([]byte(req.RequestURI))
+	cacheIdBuffer.Write(frame)
+	cacheId := base64.StdEncoding.EncodeToString(cacheIdBuffer.Bytes())
 	locker, exists := a.lockers.Get(cacheId)
 	if !exists {
-		locker := &sync.RWMutex{}
+		locker = &sync.RWMutex{}
 		a.lockers.Add(cacheId, locker, 0)
 	}
-	readCache := func() bool {
-		locker.(*sync.RWMutex).RLock()
-		defer locker.(*sync.RWMutex).RUnlock()
-		if a.incremental {
-			cache, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
-			if hit {
-				cacheBytes, err := cache.Marshal()
-				if err != nil {
-					rw.WriteHeader(500)
-					return false
-				}
-				cmBts, err := proto.Marshal(change)
-				if err != nil {
-					rw.WriteHeader(500)
-					return false
-				}
-				buffer := &bytes.Buffer{}
-				buffer.Write([]byte{0})
-				length := make([]byte, 4)
-				binary.BigEndian.PutUint32(length, uint32(len(cacheBytes)-5))
-				buffer.Write(length)
-				buffer.Write(cacheBytes)
-				rw.WriteHeader(200)
-				rw.Write(buffer.Bytes())
-				rw.Header().Add("Content-Type", "application/grpc")
-				rw.Header().Add("Grpc-Accept-Encoding", "gzip")
-				rw.Header().Add("Grpc-Encoding", "identity")
-				rw.Header().Add("Trailer:Grpc-Status", codes.OK.String())
-				rw.Header().Add("ts", strconv.FormatInt(version, 10))
-				rw.Header().Add("cm", base64.StdEncoding.EncodeToString(cmBts))
-				a.next.ServeHTTP(rw, req)
-				return true
-			}
-		} else {
-			cache, hit := cache.CacheManager.GetNoVersionCache(cacheId, time.Now().Unix())
-			if hit {
-				rw.Write(cache)
-				rw.WriteHeader(200)
-				a.next.ServeHTTP(rw, req)
-				return true
-			}
-		}
-		return false
-	}
-	if readCache() {
+	if readCache(locker.(*sync.RWMutex), a, cacheId, clientVersion, rw) {
+		a.next.ServeHTTP(rw, req)
 		return
 	}
-	func() {
-		locker.(*sync.RWMutex).Lock()
-		defer locker.(*sync.RWMutex).Unlock()
-		req.Body = ioutil.NopCloser(bytes.NewReader(bts))
-		newRw := cacheResponse{
-			cacheId:      "",
-			sourceWriter: rw,
-			buffer:       &bytes.Buffer{},
-		}
-		a.next.ServeHTTP(newRw, req)
+	newRw := &cacheResponse{
+		cacheId: "",
+		buffer:  &bytes.Buffer{},
+		header:  map[string][]string{},
+	}
 
-		if a.incremental {
-			msg := dynamicProto.NewMessage(methodDesc.GetOutputType())
-			err := msg.Unmarshal(newRw.buffer.Bytes()[5:])
+	writeCache(cacheId, locker.(*sync.RWMutex), bts, req, newRw, methodDesc, a, logger)
+	if !readCache(locker.(*sync.RWMutex), a, cacheId, clientVersion, rw) {
+		rw.WriteHeader(newRw.code)
+		rw.Write([]byte("俺也不知道"))
+	} else {
+		//a.next.ServeHTTP(rw, req)
+	}
+}
+
+func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersion int64, rw http.ResponseWriter) bool {
+	locker.RLock()
+	defer locker.RUnlock()
+	if a.incremental {
+		cache, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
+		if hit {
+			cacheBytes, err := cache.Marshal()
 			if err != nil {
-				logger.Errorf("can't parse response bytes to message.")
-				return
+				rw.WriteHeader(500)
+				return false
 			}
-			cache.CacheManager.SetVersionCache(cacheId, time.Now().Unix(), msg, methodDesc.GetOutputType(), a.ttl.Milliseconds())
-		} else {
-			cache.CacheManager.SetNoVersionCache(cacheId, newRw.buffer.Bytes(), a.ttl.Milliseconds())
+			cmBts, err := proto.Marshal(change)
+			if err != nil {
+				rw.WriteHeader(500)
+				return false
+			}
+			buffer := &bytes.Buffer{}
+			buffer.Write([]byte{0})
+			length := make([]byte, 4)
+			binary.BigEndian.PutUint32(length, uint32(len(cacheBytes)))
+			buffer.Write(length)
+			buffer.Write(cacheBytes)
+			rw.Header().Add("Content-Type", "application/grpc")
+			rw.Header().Add("Grpc-Accept-Encoding", "gzip")
+			rw.Header().Add("Grpc-Encoding", "identity")
+			rw.Header().Add("Trailer:Grpc-Status", "0")
+			rw.Header().Add("ts", strconv.FormatInt(version, 10))
+			rw.Header().Add("cm", base64.StdEncoding.EncodeToString(cmBts))
+			rw.WriteHeader(200)
+			rw.Write(buffer.Bytes())
+			return true
 		}
-	}()
-	readCache()
+	} else {
+		cache, hit := cache.CacheManager.GetNoVersionCache(cacheId, time.Now().Unix())
+		if hit {
+			rw.Write(cache)
+			rw.WriteHeader(200)
+			return true
+		}
+	}
+	return false
+}
+
+func writeCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http.Request, newRw *cacheResponse, methodDesc *desc.MethodDescriptor, a *grpcHandle, logger log.Logger) {
+	locker.Lock()
+	defer locker.Unlock()
+	req.Body = ioutil.NopCloser(bytes.NewReader(reqBytes))
+
+	a.next.ServeHTTP(newRw, req)
+
+	if a.incremental {
+		msg := dynamicProto.NewMessage(methodDesc.GetOutputType())
+		err := msg.Unmarshal(newRw.buffer.Bytes()[5:])
+		if err != nil {
+			logger.Errorf("can't parse response bytes to message.")
+			return
+		}
+		cache.CacheManager.SetVersionCache(cacheId, time.Now().Unix(), msg, methodDesc.GetOutputType(), a.ttl.Milliseconds())
+	} else {
+		cache.CacheManager.SetNoVersionCache(cacheId, newRw.buffer.Bytes(), a.ttl.Milliseconds())
+	}
 }
 
 type cacheResponse struct {
-	cacheId      string
-	sourceWriter http.ResponseWriter
-	buffer       *bytes.Buffer
-	code         int
+	cacheId string
+	buffer  *bytes.Buffer
+	code    int
+	header  http.Header
 }
 
 func (r cacheResponse) Header() http.Header {
-	return r.sourceWriter.Header()
+	return r.header
 }
 
 func (r cacheResponse) Write(bts []byte) (int, error) {
 	r.buffer.Write(bts)
-	return r.sourceWriter.Write(bts)
+	return len(bts), nil
 }
 
 func (r cacheResponse) WriteHeader(statusCode int) {
 	r.code = statusCode
-	r.sourceWriter.WriteHeader(statusCode)
 }
