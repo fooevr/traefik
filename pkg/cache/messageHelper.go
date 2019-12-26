@@ -3,7 +3,6 @@ package cache
 import (
 	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
-	"github.com/imroc/biu"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"log"
@@ -12,11 +11,7 @@ import (
 )
 
 func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *com_variflight_middleware_gateway_cache.ChangeMeta {
-	change := &com_variflight_middleware_gateway_cache.ChangeMeta{
-		Type:      com_variflight_middleware_gateway_cache.ChangeMeta_unchanged,
-		Fields:    []*com_variflight_middleware_gateway_cache.ChangeMeta{},
-		FieldTags: make([]byte, int32(math.Ceil(float64(len(oldMessage.GetMessageDescriptor().GetFields()))/8))),
-	}
+	change := &com_variflight_middleware_gateway_cache.ChangeMeta{}
 	for _, field := range oldMessage.GetMessageDescriptor().GetFields() {
 		if checkNoFieldOrNil(field, oldMessage) && checkNoFieldOrNil(field, incrMessage) {
 			continue
@@ -24,51 +19,44 @@ func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *com_variflig
 		// create
 		if checkNoFieldOrNil(field, oldMessage) && !checkNoFieldOrNil(field, incrMessage) {
 			oldMessage.SetField(field, incrMessage.GetField(field))
-			change.Fields[field.GetNumber()] = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}
+			setField(field, oldMessage.GetMessageDescriptor(), ChangeType_Create, nil, change)
 			continue
 		}
 		// delete
 		if !checkNoFieldOrNil(field, oldMessage) && checkNoFieldOrNil(field, incrMessage) {
 			oldMessage.ClearField(field)
-			change.Fields[field.GetNumber()] = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}
+			setField(field, oldMessage.GetMessageDescriptor(), ChangeType_Delete, nil, change)
 			continue
 		}
 
 		if field.IsMap() {
 			mc := mergeAndDiffMap(oldMessage, incrMessage, field)
-			if mc.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-				change.Fields[field.GetNumber()] = mc
+			if len(mc.MapString) > 0 || len(mc.MapInt64) > 0 || len(mc.MapInt32) > 0 || len(mc.MapBool) > 0 {
+				setField(field, oldMessage.GetMessageDescriptor(), ChangeType_Update, mc, change)
 			}
 		} else if field.IsRepeated() {
 			rc := mergeAndDiffRepeated(oldMessage, incrMessage, field)
-			if rc.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-				change.Fields[field.GetNumber()] = rc
+			if rc {
+				setField(field, oldMessage.GetMessageDescriptor(), ChangeType_Update, nil, change)
 			}
 		} else if field.GetMessageType() != nil {
 			mc := mergeAndDiffMessage(oldMessage.GetField(field).(*dynamic.Message), incrMessage.GetField(field).(*dynamic.Message))
-			if mc.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-				change.Fields[field.GetNumber()] = mc
+			if len(mc.Fields) > 0 {
+				setField(field, oldMessage.GetMessageDescriptor(), ChangeType_Update, mc, change)
 			}
 		} else {
 			ov := oldMessage.GetField(field)
 			nv := incrMessage.GetField(field)
 			if ov != nv {
-				change.Fields[field.GetNumber()] = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_updated}
-				oldMessage.SetField(field, nv)
+				setField(field, oldMessage.GetMessageDescriptor(), ChangeType_Update, nil, change)
 			}
 		}
-	}
-	if len(change.Fields) > 0 {
-		change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
-	} else {
-		change.Fields = nil
 	}
 	return change
 }
 
 func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.FieldDescriptor) *com_variflight_middleware_gateway_cache.ChangeMeta {
 	result := &com_variflight_middleware_gateway_cache.ChangeMeta{
-		Type:      com_variflight_middleware_gateway_cache.ChangeMeta_unchanged,
 		MapString: map[string]*com_variflight_middleware_gateway_cache.ChangeMeta{},
 		MapInt32:  map[int32]*com_variflight_middleware_gateway_cache.ChangeMeta{},
 		MapInt64:  map[int64]*com_variflight_middleware_gateway_cache.ChangeMeta{},
@@ -79,19 +67,22 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 		if nv, ok := incrMessage.GetField(mapField).(map[interface{}]interface{})[key]; !ok {
 			// deleted
 			oldMessage.RemoveMapField(mapField, key)
-			c = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}
+			c = &com_variflight_middleware_gateway_cache.ChangeMeta{Deleted: true}
 		} else {
 			// updated
 			if mapField.GetMapValueType().GetMessageType() != nil {
 				c = mergeAndDiffMessage(val.(*dynamic.Message), nv.(*dynamic.Message))
+				if len(c.Fields) == 0 {
+					c = nil
+				}
 			} else {
 				if nv != val {
 					oldMessage.PutMapField(mapField, key, nv)
-					c = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_updated}
+					c = &com_variflight_middleware_gateway_cache.ChangeMeta{}
 				}
 			}
 		}
-		if c != nil && c.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
+		if c != nil {
 			if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT32 {
 				result.MapInt32[key.(int32)] = c
 			} else if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT64 {
@@ -110,7 +101,7 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 	incrMessage.ForEachMapFieldEntry(mapField, func(key, val interface{}) bool {
 		//created
 		if _, ok := oldMessage.GetField(mapField).(map[interface{}]interface{})[key]; !ok {
-			c := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}
+			c := &com_variflight_middleware_gateway_cache.ChangeMeta{Created: true}
 			if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT32 {
 				result.MapInt32[key.(int32)] = c
 			} else if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT64 {
@@ -126,51 +117,30 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 		}
 		return true
 	})
-	if len(result.MapBool) > 0 || len(result.MapInt32) > 0 || len(result.MapInt64) > 0 || len(result.MapString) > 0 {
-		result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
-	}
-	if len(result.MapBool) == 0 {
-		result.MapBool = nil
-	}
-	if len(result.MapInt64) == 0 {
-		result.MapInt64 = nil
-	}
-	if len(result.MapInt32) == 0 {
-		result.MapInt32 = nil
-	}
-	if len(result.MapString) == 0 {
-		result.MapString = nil
-	}
 	return result
 }
 
-func mergeAndDiffRepeated(oldMessage, incrMessage *dynamic.Message, repeatedField *desc.FieldDescriptor) *com_variflight_middleware_gateway_cache.ChangeMeta {
-	result := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}
+func mergeAndDiffRepeated(oldMessage, incrMessage *dynamic.Message, repeatedField *desc.FieldDescriptor) bool {
 	ov := oldMessage.GetField(repeatedField).([]interface{})
 	nv := incrMessage.GetField(repeatedField).([]interface{})
 	if len(ov) != len(nv) {
-		result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
+		return true
 	} else {
 		for idx, ovItem := range ov {
 			nvItem := nv[idx]
 			if repeatedField.GetMessageType() != nil {
 				c := mergeAndDiffMessage(ovItem.(*dynamic.Message), nvItem.(*dynamic.Message))
-				if c.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-					result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
-					break
+				if checkMessageUpdated(c.FieldTags) {
+					return true
 				}
 			} else {
 				if ovItem != nvItem {
-					result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
-					break
+					return true
 				}
 			}
 		}
 	}
-	if result.Type == com_variflight_middleware_gateway_cache.ChangeMeta_updated {
-		oldMessage.SetField(repeatedField, incrMessage.GetField(repeatedField))
-	}
-	return result
+	return false
 }
 
 func checkNoFieldOrNil(field *desc.FieldDescriptor, message *dynamic.Message) bool {
@@ -184,26 +154,29 @@ func checkNoFieldOrNil(field *desc.FieldDescriptor, message *dynamic.Message) bo
 }
 
 func getIncrementalMessage(fullMessage, incrementalMessage *dynamic.Message, change *com_variflight_middleware_gateway_cache.ChangeMeta) {
-	for fieldIdx, fieldChange := range change.Fields {
-		field := fullMessage.GetMessageDescriptor().FindFieldByNumber(fieldIdx)
-		if fieldChange.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created {
-			incrementalMessage.SetField(field, fullMessage.GetField(field))
-			continue
-		} else if fieldChange.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
-			incrementalMessage.ClearField(field)
-			continue
-		} else if checkNoFieldOrNil(field, incrementalMessage) {
-			incrementalMessage.SetField(field, fullMessage.GetField(field))
-			continue
-		}
-		if field.IsMap() {
-			getIncrementalMap(fullMessage, incrementalMessage, field, fieldChange)
-		} else if field.IsRepeated() {
-			incrementalMessage.SetField(field, fullMessage.GetField(field))
-		} else if field.GetMessageType() != nil {
-			getIncrementalMessage(fullMessage.GetField(field).(*dynamic.Message), incrementalMessage.GetField(field).(*dynamic.Message), fieldChange)
-		} else {
-			incrementalMessage.SetField(field, fullMessage.GetField(field))
+	curFiledIndex := 0
+	for _, item := range change.FieldTags {
+		for i := 0; i < 4; i++ {
+			ct := item << (i * 2) & 0b11000000
+			field := fullMessage.GetMessageDescriptor().GetFields()[curFiledIndex]
+			ct, fieldChange := getField(field, fullMessage.GetMessageDescriptor(), change)
+			// TODO: 验证desc中的field是否按序排列
+			if ct == ChangeType_Create {
+				fullMessage.SetField(field, incrementalMessage.GetField(field))
+			} else if ct == ChangeType_Delete {
+				fullMessage.ClearField(field)
+			} else if ct == ChangeType_Update {
+				if field.IsMap() {
+					getIncrementalMap(fullMessage, incrementalMessage, field, fieldChange)
+				} else if field.IsRepeated() {
+					fullMessage.SetField(field, incrementalMessage.GetField(field))
+				} else if field.GetMessageType() != nil {
+					getIncrementalMessage(fullMessage.GetField(field).(*dynamic.Message), incrementalMessage.GetField(field).(*dynamic.Message), fieldChange)
+				} else {
+					fullMessage.SetField(field, incrementalMessage.GetField(field))
+				}
+			}
+			curFiledIndex++
 		}
 	}
 }
@@ -230,11 +203,11 @@ func getIncrementalMap(fullMessage *dynamic.Message, incrMessage *dynamic.Messag
 		log.Panicf("can't increment message, cause unsupport map key type:%s", field.GetMapKeyType().GetType())
 	}
 	for key, change := range mapChange {
-		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created {
+		if change.Created {
 			incrMessage.PutMapField(field, key, fullMessage.GetMapField(field, key))
-		} else if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
+		} else if change.Deleted {
 			incrMessage.RemoveMapField(field, key)
-		} else if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_updated {
+		} else if !change.Unchanged {
 			if field.GetMapValueType().GetMessageType() != nil {
 				getIncrementalMessage(fullMessage.GetMapField(field, key).(*dynamic.Message), incrMessage.GetMapField(field, key).(*dynamic.Message), change)
 			} else {
@@ -318,4 +291,95 @@ func getIncrementalChange(source, increment *com_variflight_middleware_gateway_c
 			}
 		}
 	}
+}
+
+func setField(fieldDescriptor *desc.FieldDescriptor, messageDescriptor *desc.MessageDescriptor, ct ChangeType, fieldCM *com_variflight_middleware_gateway_cache.ChangeMeta, messageCM *com_variflight_middleware_gateway_cache.ChangeMeta) {
+	if ct != ChangeType_UnChange {
+		messageCM.Fields = []*com_variflight_middleware_gateway_cache.ChangeMeta{}
+		messageCM.FieldTags = make([]byte, int32(math.Ceil(float64(len(messageDescriptor.GetFields()))/4)))
+		messageCM.ChangeTags = make([]byte, int32(math.Ceil(float64(len(messageDescriptor.GetFields()))/8)))
+	}
+	var indexOfMsgFields int
+	for idx, field := range messageDescriptor.GetFields() {
+		if field.GetNumber() == fieldDescriptor.GetNumber() {
+			indexOfMsgFields = idx
+			break
+		}
+	}
+
+	// 设置FieldTag
+	byteIndex := indexOfMsgFields / 4
+	bitIndex := (indexOfMsgFields % 4) * 2
+
+	bt := messageCM.FieldTags[byteIndex]
+	// clean then set changeTag
+	bt = bt&^(0b11000000>>bitIndex) | (ct >> bitIndex)
+	messageCM.FieldTags[bitIndex] = bt
+
+	if fieldCM != nil {
+		fieldArrIndex := 0
+		comparedCount := 0
+		for _, changeTag := range messageCM.ChangeTags {
+			if comparedCount >= indexOfMsgFields {
+				break
+			}
+			for i := 0; i < 8; i++ {
+				if comparedCount >= indexOfMsgFields {
+					break
+				}
+				if (changeTag>>(7-i))&0b1 == 1 {
+					fieldArrIndex++
+				}
+				comparedCount++
+			}
+		}
+		cTag := messageCM.ChangeTags[int(math.Ceil(float64(indexOfMsgFields)/8))]
+		messageCM.ChangeTags[int(math.Ceil(float64(indexOfMsgFields)/8))] = cTag | (0b1 << (7 - (indexOfMsgFields % 8)))
+		temp := append([]*com_variflight_middleware_gateway_cache.ChangeMeta{}, messageCM.Fields[fieldArrIndex:]...)
+		messageCM.Fields = append(append(messageCM.Fields[:fieldArrIndex], fieldCM), temp...)
+	}
+}
+
+func getField(field *desc.FieldDescriptor, messageDesc *desc.MessageDescriptor, messageChange *com_variflight_middleware_gateway_cache.ChangeMeta) (ct ChangeType, change *com_variflight_middleware_gateway_cache.ChangeMeta) {
+	indexOfMsgFields := 0
+	for idx, item := range messageDesc.GetFields() {
+		if item.GetNumber() == field.GetNumber() {
+			indexOfMsgFields = idx
+			break
+		}
+	}
+	ct = messageChange.FieldTags[int(math.Ceil(float64(indexOfMsgFields)/4))] << ((indexOfMsgFields % 4) * 2) & 0b11000000
+	hasChangeMeta := messageChange.FieldTags[int(math.Ceil(float64(indexOfMsgFields)/8))]>>(7-indexOfMsgFields%8)&0b1 == 1
+	if hasChangeMeta {
+		loopCount := 0
+		changeMetaIndex := 0
+		for _, item := range messageChange.ChangeTags {
+			if loopCount >= indexOfMsgFields {
+				break
+			}
+			for i := 0; i < 8; i++ {
+				if loopCount >= indexOfMsgFields {
+					break
+				}
+				curHasChangeMeta := item>>(7-i)*0b1 == 1
+				if curHasChangeMeta {
+					changeMetaIndex++
+				}
+				loopCount++
+			}
+		}
+		change = messageChange.Fields[changeMetaIndex]
+		return
+	} else {
+		return
+	}
+}
+
+func checkMessageUpdated(fieldTags []byte) bool {
+	for _, item := range fieldTags {
+		if item > 0 {
+			return true
+		}
+	}
+	return false
 }

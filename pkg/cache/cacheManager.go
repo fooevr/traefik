@@ -1,10 +1,8 @@
 package cache
 
 import (
-	"fmt"
 	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
-	"github.com/imroc/biu"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	gca "github.com/patrickmn/go-cache"
@@ -56,14 +54,14 @@ func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.M
 		return nil, nil, 0, false
 	}
 	if ci.val == nil {
-		return nil, &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}, ci.latestVersion, true
+		return nil, &com_variflight_middleware_gateway_cache.ChangeMeta{Deleted: true}, ci.latestVersion, true
 	}
 	cursorIdx := ci.versions.IndexOf(version)
 	if cursorIdx < 0 {
-		return cd.(*cacheItem).val.(*dynamic.Message), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, ci.latestVersion, true
+		return cd.(*cacheItem).val.(*dynamic.Message), &com_variflight_middleware_gateway_cache.ChangeMeta{Created: true}, ci.latestVersion, true
 	}
 	resultData := dynamic.NewMessage(ci.messageDesc)
-	resultChange := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}
+	resultChange := &com_variflight_middleware_gateway_cache.ChangeMeta{}
 	for i := cursorIdx + 1; i < ci.versions.Size(); i++ {
 		version, ok := ci.versions.Get(i)
 		if !ok {
@@ -74,16 +72,16 @@ func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.M
 		if !ok {
 			log.Panic("缓存和版本索引不匹配")
 		}
-		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
+		if change.Unchanged {
 			continue
 		}
-		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created ||
-			change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
+		if change.Created ||
+			change.Deleted {
 			resultData = ci.val.(*dynamic.Message)
 			if resultData == nil {
-				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}
+				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Deleted: true}
 			} else {
-				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}
+				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Created: true}
 			}
 			break
 		}
@@ -99,7 +97,7 @@ func (m *cacheManager) SetNoVersionCache(id string, data []byte, ttl int64) {
 
 func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.Message, messageDesc *desc.MessageDescriptor, ttl int64) {
 	ci, hit := m.c.Get(id)
-	if !hit {
+	if !hit { // 未命中缓存，创建缓存
 		ci = &cacheItem{
 			c:             gca.New(-1, time.Minute*1),
 			latestVersion: version,
@@ -115,9 +113,9 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 		})
 		change := &com_variflight_middleware_gateway_cache.ChangeMeta{}
 		if data == nil {
-			change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_deleted
+			change.Deleted = true
 		} else {
-			change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_created
+			change.Created = true
 		}
 		ci.(*cacheItem).versions.Add(version)
 		ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), change, 0)
@@ -126,14 +124,14 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 		if ci.(*cacheItem).val == nil && data == nil {
 			ci.(*cacheItem).latestVersion = version
 			ci.(*cacheItem).versions.Add(version)
-			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}, 0)
+			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Unchanged: true}, 0)
 		} else if ci.(*cacheItem).val == nil && data != nil {
 			ci.(*cacheItem).val = data
 			ci.(*cacheItem).latestVersion = version
 			ci.(*cacheItem).versions.Add(version)
-			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, 0)
+			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Created: true}, 0)
 		} else if ci.(*cacheItem).val != nil && data == nil {
-			ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}, 0)
+			ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Deleted: true}, 0)
 			ci.(*cacheItem).versions.Add(version)
 			ci.(*cacheItem).latestVersion = version
 			ci.(*cacheItem).val = nil
@@ -149,38 +147,4 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 
 var CacheManager = &cacheManager{
 	c: gca.New(time.Millisecond*0, time.Minute*1),
-}
-
-func setField(fieldDescriptor *desc.FieldDescriptor, messageDescriptor *desc.MessageDescriptor, ct ChangeType, fieldCM *com_variflight_middleware_gateway_cache.ChangeMeta, messageCM *com_variflight_middleware_gateway_cache.ChangeMeta) {
-	var indexOfMsgFields int
-	for idx, field := range messageDescriptor.GetFields() {
-		if field.GetNumber() == fieldDescriptor.GetNumber() {
-			indexOfMsgFields = idx
-		}
-	}
-	byteIndex := indexOfMsgFields / 4
-	bitIndex := (indexOfMsgFields % 4) * 2
-	fieldArrIndex := 0
-	fieldTagIndex := 0
-	for i := 0; i <= len(messageCM.FieldTags); i++ {
-		if fieldTagIndex >= indexOfMsgFields {
-			break
-		}
-		for j := 0; j < 4; j++ {
-			if fieldTagIndex >= indexOfMsgFields {
-				break
-			}
-			if messageCM.FieldTags[i]<<(j*2)>>(6-j*2) != 0b00 {
-				fieldArrIndex++
-			}
-			fieldTagIndex++
-		}
-	}
-
-	bt := messageCM.FieldTags[byteIndex]
-	// clean the set changeTag
-	bt = bt&^(0b11000000>>bitIndex) | (ct >> bitIndex)
-	messageCM.FieldTags[bitIndex] = bt
-	temp := append([]*com_variflight_middleware_gateway_cache.ChangeMeta{}, messageCM.Fields[fieldArrIndex:]...)
-	messageCM.Fields = append(append(messageCM.Fields[:fieldArrIndex], fieldCM), temp...)
 }

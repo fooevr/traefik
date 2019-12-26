@@ -4,9 +4,15 @@ package com.variflight.middleware.gateway.cache;
 
 message ChangeMeta{
     bytes fieldTags = 1;
-    repeated ChangeMeta fields = 2;
-    map<int32, ChangeMeta> map_int32 = 3;
-    map<int64, ChangeMeta> map_int64 = 4;
-    map<bool, ChangeMeta> map_bool = 5;
-    map<string, ChangeMeta> map_string = 6;
+    bytes changeTags = 2;
+    repeated ChangeMeta fields = 3;
+    map<int32, ChangeMeta> map_int32 = 4;
+    map<int64, ChangeMeta> map_int64 = 5;
+    map<bool, ChangeMeta> map_bool = 6;
+    map<string, ChangeMeta> map_string = 7;
+
+    // only in top level message
+    bool created = 8;
+    bool deleted = 9;
+    bool unchanged = 10;
 }
