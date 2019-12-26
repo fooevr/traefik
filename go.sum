@@ -331,6 +331,8 @@ github.com/iij/doapi v0.0.0-20190504054126-0bbf12d6d7df h1:MZf03xP9WdakyXhOWuAD5
 github.com/iij/doapi v0.0.0-20190504054126-0bbf12d6d7df/go.mod h1:QMZY7/J/KSQEhKWFeDesPjMj+wCHReeknARU3wqlyN4=
 github.com/imdario/mergo v0.3.5 h1:JboBksRwiiAJWvIYJVo46AfV+IAIKZpfrSzVKj42R4Q=
 github.com/imdario/mergo v0.3.5/go.mod h1:2EnlNZ0deacrJVfApfmtdGgDfMuh/nq6Ok1EcJh5FfA=
+github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0 h1:pkyNAS9IQiZgseFrdhZC4cloBo2k2O2Son/k+3NquwY=
+github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0/go.mod h1:wscexmyH+oDXfQr1q8PAZUXfKnxCUcNm62D/M5Ec8Lw=
 github.com/influxdata/influxdb1-client v0.0.0-20190402204710-8ff2fc3824fc h1:KpMgaYJRieDkHZJWY3LMafvtqS/U8xX6+lUN+OKpl/Y=
 github.com/influxdata/influxdb1-client v0.0.0-20190402204710-8ff2fc3824fc/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=
 github.com/instana/go-sensor v1.4.17-0.20190515112224-78c14625025a h1:S3CSPEIeIuXsxtwurn9dx41RoHIAvVjEeiQV6enM7WA=

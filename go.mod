@@ -52,6 +52,7 @@ require (
 	github.com/hashicorp/consul/api v1.2.0
 	github.com/hashicorp/go-version v1.2.0
 	github.com/huandu/xstrings v1.2.0 // indirect
+	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
 	github.com/influxdata/influxdb1-client v0.0.0-20190402204710-8ff2fc3824fc
 	github.com/instana/go-sensor v1.4.17-0.20190515112224-78c14625025a
 	github.com/jhump/protoreflect v1.5.0

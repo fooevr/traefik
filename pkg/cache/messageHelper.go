@@ -3,14 +3,20 @@ package cache
 import (
 	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
+	"github.com/imroc/biu"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"log"
+	"math"
 	"reflect"
 )
 
 func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *com_variflight_middleware_gateway_cache.ChangeMeta {
-	change := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged, Fields: map[int32]*com_variflight_middleware_gateway_cache.ChangeMeta{}}
+	change := &com_variflight_middleware_gateway_cache.ChangeMeta{
+		Type:      com_variflight_middleware_gateway_cache.ChangeMeta_unchanged,
+		Fields:    []*com_variflight_middleware_gateway_cache.ChangeMeta{},
+		FieldTags: make([]byte, int32(math.Ceil(float64(len(oldMessage.GetMessageDescriptor().GetFields()))/8))),
+	}
 	for _, field := range oldMessage.GetMessageDescriptor().GetFields() {
 		if checkNoFieldOrNil(field, oldMessage) && checkNoFieldOrNil(field, incrMessage) {
 			continue

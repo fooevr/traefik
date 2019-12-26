@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"fmt"
 	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
+	"github.com/imroc/biu"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	gca "github.com/patrickmn/go-cache"
@@ -25,6 +27,15 @@ type cacheItem struct {
 type cacheManager struct {
 	c *gca.Cache
 }
+
+type ChangeType int8
+
+const (
+	ChangeType_UnChange ChangeType = 0b00000000
+	ChangeType_Create   ChangeType = 0b01000000
+	ChangeType_Update   ChangeType = 0b10000000
+	ChangeType_Delete   ChangeType = 0b11000000
+)
 
 func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit bool) {
 	cd, ext, hit := m.c.GetWithExpiration(id)
@@ -138,4 +149,38 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 
 var CacheManager = &cacheManager{
 	c: gca.New(time.Millisecond*0, time.Minute*1),
+}
+
+func setField(fieldDescriptor *desc.FieldDescriptor, messageDescriptor *desc.MessageDescriptor, ct ChangeType, fieldCM *com_variflight_middleware_gateway_cache.ChangeMeta, messageCM *com_variflight_middleware_gateway_cache.ChangeMeta) {
+	var indexOfMsgFields int
+	for idx, field := range messageDescriptor.GetFields() {
+		if field.GetNumber() == fieldDescriptor.GetNumber() {
+			indexOfMsgFields = idx
+		}
+	}
+	byteIndex := indexOfMsgFields / 4
+	bitIndex := (indexOfMsgFields % 4) * 2
+	fieldArrIndex := 0
+	fieldTagIndex := 0
+	for i := 0; i <= len(messageCM.FieldTags); i++ {
+		if fieldTagIndex >= indexOfMsgFields {
+			break
+		}
+		for j := 0; j < 4; j++ {
+			if fieldTagIndex >= indexOfMsgFields {
+				break
+			}
+			if messageCM.FieldTags[i]<<(j*2)>>(6-j*2) != 0b00 {
+				fieldArrIndex++
+			}
+			fieldTagIndex++
+		}
+	}
+
+	bt := messageCM.FieldTags[byteIndex]
+	// clean the set changeTag
+	bt = bt&^(0b11000000>>bitIndex) | (ct >> bitIndex)
+	messageCM.FieldTags[bitIndex] = bt
+	temp := append([]*com_variflight_middleware_gateway_cache.ChangeMeta{}, messageCM.Fields[fieldArrIndex:]...)
+	messageCM.Fields = append(append(messageCM.Fields[:fieldArrIndex], fieldCM), temp...)
 }
