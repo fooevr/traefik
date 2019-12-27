@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package com.variflight.middleware.gateway.cache;
+// 变更描述，可以表示一个Message或Message中一个Map的变更元数据
+// 如果是用于描述Message,则使用fieldTags, changeTags, fieldChangeMetas来描述这个Message中每个field的是否变化和变化内容，具体见相应的字段描述
+message ChangeDesc{
+    // Message中字段变更类型标记，每两位表示一个字段，按字段number值排序，0b00无变更,0b01新建,0b10更新,0b11删除
+    bytes fieldTags = 1;
+    // Message中字段变更描述索引，对应到fields中的值，每一位表示一个字段，按字段number值排序，0b0表示该字段无变更描述, 0b1表示该字段有变更
+    bytes changeTags = 2;
+    // Message中内嵌的Message字段或Map字段的变更描述
+    repeated ChangeDesc fieldsChangeMetas = 3;
+    // Map字段的变更描述，key为map中的key，value为空，则表示该key已删除，不为空且fieldTags长度为0，则表示该key为新增或值已变更(值类型)
+    // 不为空，且fieldTags长度不为0，则表示该key对应的value为message类型的变更描述
+    map<int32, ChangeDesc> map_int32 = 4;
+    map<int64, ChangeDesc> map_int64 = 5;
+    map<bool, ChangeDesc> map_bool = 6;
+    map<string, ChangeDesc> map_string = 7;
+}
