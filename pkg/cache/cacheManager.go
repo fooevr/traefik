@@ -1,7 +1,6 @@
 package cache
 
 import (
-	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
@@ -11,6 +10,25 @@ import (
 	"sync"
 	"time"
 )
+
+type ChangeType uint8
+
+const (
+	ChangeType_Unchange ChangeType = 0
+	ChangeType_Create   ChangeType = 1
+	ChangeType_Update   ChangeType = 2
+	ChangeType_Delete   ChangeType = 3
+)
+
+type ChangeMeta struct {
+	Type         ChangeType
+	FieldChanges map[int32]*ChangeMeta
+	MapChange    map[interface{}]interface{}
+	MapString    map[string]*ChangeMeta
+	MapBool      map[bool]*ChangeMeta
+	MapInt64     map[int64]*ChangeMeta
+	MapInt32     map[int32]*ChangeMeta
+}
 
 type cacheItem struct {
 	c             *gca.Cache
@@ -34,7 +52,7 @@ func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit 
 	return cd.([]byte), hit
 }
 
-func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, changeDesc *com_variflight_middleware_gateway_cache.ChangeMeta, newVersion int64, hit bool) {
+func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, changeDesc *ChangeMeta, newVersion int64, hit bool) {
 	cd, hit := m.c.Get(id)
 	if !hit {
 		return nil, nil, 0, false
@@ -45,34 +63,34 @@ func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.M
 		return nil, nil, 0, false
 	}
 	if ci.val == nil {
-		return nil, &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}, ci.latestVersion, true
+		return nil, &ChangeMeta{Type: ChangeType_Delete}, ci.latestVersion, true
 	}
 	cursorIdx := ci.versions.IndexOf(version)
 	if cursorIdx < 0 {
-		return cd.(*cacheItem).val.(*dynamic.Message), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, ci.latestVersion, true
+		return cd.(*cacheItem).val.(*dynamic.Message), &ChangeMeta{Type: ChangeType_Create}, ci.latestVersion, true
 	}
 	resultData := dynamic.NewMessage(ci.messageDesc)
-	resultChange := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}
+	resultChange := &ChangeMeta{Type: ChangeType_Unchange}
 	for i := cursorIdx + 1; i < ci.versions.Size(); i++ {
 		version, ok := ci.versions.Get(i)
 		if !ok {
 			log.Panic("缓存和版本索引不匹配")
 		}
 		cacheChange, ok := ci.c.Get(strconv.FormatInt(version.(int64), 10))
-		change := cacheChange.(*com_variflight_middleware_gateway_cache.ChangeMeta)
+		change := cacheChange.(*ChangeMeta)
 		if !ok {
 			log.Panic("缓存和版本索引不匹配")
 		}
-		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
+		if change.Type == ChangeType_Unchange {
 			continue
 		}
-		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created ||
-			change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
+		if change.Type == ChangeType_Create ||
+			change.Type == ChangeType_Delete {
 			resultData = ci.val.(*dynamic.Message)
 			if resultData == nil {
-				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}
+				resultChange = &ChangeMeta{Type: ChangeType_Delete}
 			} else {
-				resultChange = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}
+				resultChange = &ChangeMeta{Type: ChangeType_Create}
 			}
 			break
 		}
@@ -102,11 +120,11 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 			versions := ci.(*cacheItem).versions
 			versions.Remove(versions.IndexOf(s))
 		})
-		change := &com_variflight_middleware_gateway_cache.ChangeMeta{}
+		change := &ChangeMeta{}
 		if data == nil {
-			change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_deleted
+			change.Type = ChangeType_Delete
 		} else {
-			change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_created
+			change.Type = ChangeType_Create
 		}
 		ci.(*cacheItem).versions.Add(version)
 		ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), change, 0)
@@ -115,14 +133,14 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 		if ci.(*cacheItem).val == nil && data == nil {
 			ci.(*cacheItem).latestVersion = version
 			ci.(*cacheItem).versions.Add(version)
-			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}, 0)
+			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &ChangeMeta{Type: ChangeType_Unchange}, 0)
 		} else if ci.(*cacheItem).val == nil && data != nil {
 			ci.(*cacheItem).val = data
 			ci.(*cacheItem).latestVersion = version
 			ci.(*cacheItem).versions.Add(version)
-			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}, 0)
+			ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &ChangeMeta{Type: ChangeType_Create}, 0)
 		} else if ci.(*cacheItem).val != nil && data == nil {
-			ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}, 0)
+			ci.(*cacheItem).c.Set(strconv.FormatInt(version, 10), &ChangeMeta{Type: ChangeType_Delete}, 0)
 			ci.(*cacheItem).versions.Add(version)
 			ci.(*cacheItem).latestVersion = version
 			ci.(*cacheItem).val = nil

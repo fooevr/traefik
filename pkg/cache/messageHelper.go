@@ -1,7 +1,6 @@
 package cache
 
 import (
-	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
@@ -9,8 +8,8 @@ import (
 	"reflect"
 )
 
-func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *com_variflight_middleware_gateway_cache.ChangeMeta {
-	change := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged, Fields: map[int32]*com_variflight_middleware_gateway_cache.ChangeMeta{}}
+func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *ChangeMeta {
+	change := &ChangeMeta{Type: ChangeType_Unchange, FieldChanges: map[int32]*ChangeMeta{}}
 	for _, field := range oldMessage.GetMessageDescriptor().GetFields() {
 		if checkNoFieldOrNil(field, oldMessage) && checkNoFieldOrNil(field, incrMessage) {
 			continue
@@ -18,62 +17,62 @@ func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *com_variflig
 		// create
 		if checkNoFieldOrNil(field, oldMessage) && !checkNoFieldOrNil(field, incrMessage) {
 			oldMessage.SetField(field, incrMessage.GetField(field))
-			change.Fields[field.GetNumber()] = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}
+			change.FieldChanges[field.GetNumber()] = &ChangeMeta{Type: ChangeType_Create}
 			continue
 		}
 		// delete
 		if !checkNoFieldOrNil(field, oldMessage) && checkNoFieldOrNil(field, incrMessage) {
 			oldMessage.ClearField(field)
-			change.Fields[field.GetNumber()] = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}
+			change.FieldChanges[field.GetNumber()] = &ChangeMeta{Type: ChangeType_Delete}
 			continue
 		}
 
 		if field.IsMap() {
 			mc := mergeAndDiffMap(oldMessage, incrMessage, field)
-			if mc.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-				change.Fields[field.GetNumber()] = mc
+			if mc.Type != ChangeType_Unchange {
+				change.FieldChanges[field.GetNumber()] = mc
 			}
 		} else if field.IsRepeated() {
 			rc := mergeAndDiffRepeated(oldMessage, incrMessage, field)
-			if rc.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-				change.Fields[field.GetNumber()] = rc
+			if rc.Type != ChangeType_Unchange {
+				change.FieldChanges[field.GetNumber()] = rc
 			}
 		} else if field.GetMessageType() != nil {
 			mc := mergeAndDiffMessage(oldMessage.GetField(field).(*dynamic.Message), incrMessage.GetField(field).(*dynamic.Message))
-			if mc.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-				change.Fields[field.GetNumber()] = mc
+			if mc.Type != ChangeType_Unchange {
+				change.FieldChanges[field.GetNumber()] = mc
 			}
 		} else {
 			ov := oldMessage.GetField(field)
 			nv := incrMessage.GetField(field)
 			if ov != nv {
-				change.Fields[field.GetNumber()] = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_updated}
+				change.FieldChanges[field.GetNumber()] = &ChangeMeta{Type: ChangeType_Update}
 				oldMessage.SetField(field, nv)
 			}
 		}
 	}
-	if len(change.Fields) > 0 {
-		change.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
+	if len(change.FieldChanges) > 0 {
+		change.Type = ChangeType_Update
 	} else {
-		change.Fields = nil
+		change.FieldChanges = nil
 	}
 	return change
 }
 
-func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.FieldDescriptor) *com_variflight_middleware_gateway_cache.ChangeMeta {
-	result := &com_variflight_middleware_gateway_cache.ChangeMeta{
-		Type:      com_variflight_middleware_gateway_cache.ChangeMeta_unchanged,
-		MapString: map[string]*com_variflight_middleware_gateway_cache.ChangeMeta{},
-		MapInt32:  map[int32]*com_variflight_middleware_gateway_cache.ChangeMeta{},
-		MapInt64:  map[int64]*com_variflight_middleware_gateway_cache.ChangeMeta{},
-		MapBool:   map[bool]*com_variflight_middleware_gateway_cache.ChangeMeta{},
+func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.FieldDescriptor) *ChangeMeta {
+	result := &ChangeMeta{
+		Type:      ChangeType_Unchange,
+		MapString: map[string]*ChangeMeta{},
+		MapInt32:  map[int32]*ChangeMeta{},
+		MapInt64:  map[int64]*ChangeMeta{},
+		MapBool:   map[bool]*ChangeMeta{},
 	}
 	oldMessage.ForEachMapFieldEntry(mapField, func(key, val interface{}) bool {
-		var c *com_variflight_middleware_gateway_cache.ChangeMeta
+		var c *ChangeMeta
 		if nv, ok := incrMessage.GetField(mapField).(map[interface{}]interface{})[key]; !ok {
 			// deleted
 			oldMessage.RemoveMapField(mapField, key)
-			c = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_deleted}
+			c = &ChangeMeta{Type: ChangeType_Delete}
 		} else {
 			// updated
 			if mapField.GetMapValueType().GetMessageType() != nil {
@@ -81,11 +80,11 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 			} else {
 				if nv != val {
 					oldMessage.PutMapField(mapField, key, nv)
-					c = &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_updated}
+					c = &ChangeMeta{Type: ChangeType_Update}
 				}
 			}
 		}
-		if c != nil && c.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
+		if c != nil && c.Type != ChangeType_Unchange {
 			if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT32 {
 				result.MapInt32[key.(int32)] = c
 			} else if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT64 {
@@ -104,7 +103,7 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 	incrMessage.ForEachMapFieldEntry(mapField, func(key, val interface{}) bool {
 		//created
 		if _, ok := oldMessage.GetField(mapField).(map[interface{}]interface{})[key]; !ok {
-			c := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_created}
+			c := &ChangeMeta{Type: ChangeType_Create}
 			if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT32 {
 				result.MapInt32[key.(int32)] = c
 			} else if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT64 {
@@ -121,7 +120,7 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 		return true
 	})
 	if len(result.MapBool) > 0 || len(result.MapInt32) > 0 || len(result.MapInt64) > 0 || len(result.MapString) > 0 {
-		result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
+		result.Type = ChangeType_Update
 	}
 	if len(result.MapBool) == 0 {
 		result.MapBool = nil
@@ -138,30 +137,30 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 	return result
 }
 
-func mergeAndDiffRepeated(oldMessage, incrMessage *dynamic.Message, repeatedField *desc.FieldDescriptor) *com_variflight_middleware_gateway_cache.ChangeMeta {
-	result := &com_variflight_middleware_gateway_cache.ChangeMeta{Type: com_variflight_middleware_gateway_cache.ChangeMeta_unchanged}
+func mergeAndDiffRepeated(oldMessage, incrMessage *dynamic.Message, repeatedField *desc.FieldDescriptor) *ChangeMeta {
+	result := &ChangeMeta{Type: ChangeType_Unchange}
 	ov := oldMessage.GetField(repeatedField).([]interface{})
 	nv := incrMessage.GetField(repeatedField).([]interface{})
 	if len(ov) != len(nv) {
-		result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
+		result.Type = ChangeType_Update
 	} else {
 		for idx, ovItem := range ov {
 			nvItem := nv[idx]
 			if repeatedField.GetMessageType() != nil {
 				c := mergeAndDiffMessage(ovItem.(*dynamic.Message), nvItem.(*dynamic.Message))
-				if c.Type != com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
-					result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
+				if c.Type != ChangeType_Unchange {
+					result.Type = ChangeType_Update
 					break
 				}
 			} else {
 				if ovItem != nvItem {
-					result.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
+					result.Type = ChangeType_Update
 					break
 				}
 			}
 		}
 	}
-	if result.Type == com_variflight_middleware_gateway_cache.ChangeMeta_updated {
+	if result.Type == ChangeType_Update {
 		oldMessage.SetField(repeatedField, incrMessage.GetField(repeatedField))
 	}
 	return result
@@ -177,13 +176,13 @@ func checkNoFieldOrNil(field *desc.FieldDescriptor, message *dynamic.Message) bo
 		reflect.ValueOf(v).Kind() == reflect.Slice) && reflect.ValueOf(v).IsNil())
 }
 
-func getIncrementalMessage(fullMessage, incrementalMessage *dynamic.Message, change *com_variflight_middleware_gateway_cache.ChangeMeta) {
-	for fieldIdx, fieldChange := range change.Fields {
+func getIncrementalMessage(fullMessage, incrementalMessage *dynamic.Message, change *ChangeMeta) {
+	for fieldIdx, fieldChange := range change.FieldChanges {
 		field := fullMessage.GetMessageDescriptor().FindFieldByNumber(fieldIdx)
-		if fieldChange.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created {
+		if fieldChange.Type == ChangeType_Create {
 			incrementalMessage.SetField(field, fullMessage.GetField(field))
 			continue
-		} else if fieldChange.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
+		} else if fieldChange.Type == ChangeType_Delete {
 			incrementalMessage.ClearField(field)
 			continue
 		} else if checkNoFieldOrNil(field, incrementalMessage) {
@@ -202,8 +201,8 @@ func getIncrementalMessage(fullMessage, incrementalMessage *dynamic.Message, cha
 	}
 }
 
-func getIncrementalMap(fullMessage *dynamic.Message, incrMessage *dynamic.Message, field *desc.FieldDescriptor, fieldChange *com_variflight_middleware_gateway_cache.ChangeMeta) {
-	mapChange := map[interface{}]*com_variflight_middleware_gateway_cache.ChangeMeta{}
+func getIncrementalMap(fullMessage *dynamic.Message, incrMessage *dynamic.Message, field *desc.FieldDescriptor, fieldChange *ChangeMeta) {
+	mapChange := map[interface{}]*ChangeMeta{}
 	if field.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT32 {
 		for k, v := range fieldChange.MapInt32 {
 			mapChange[k] = v
@@ -224,11 +223,11 @@ func getIncrementalMap(fullMessage *dynamic.Message, incrMessage *dynamic.Messag
 		log.Panicf("can't increment message, cause unsupport map key type:%s", field.GetMapKeyType().GetType())
 	}
 	for key, change := range mapChange {
-		if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created {
+		if change.Type == ChangeType_Create {
 			incrMessage.PutMapField(field, key, fullMessage.GetMapField(field, key))
-		} else if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
+		} else if change.Type == ChangeType_Delete {
 			incrMessage.RemoveMapField(field, key)
-		} else if change.Type == com_variflight_middleware_gateway_cache.ChangeMeta_updated {
+		} else if change.Type == ChangeType_Update {
 			if field.GetMapValueType().GetMessageType() != nil {
 				getIncrementalMessage(fullMessage.GetMapField(field, key).(*dynamic.Message), incrMessage.GetMapField(field, key).(*dynamic.Message), change)
 			} else {
@@ -238,12 +237,12 @@ func getIncrementalMap(fullMessage *dynamic.Message, incrMessage *dynamic.Messag
 	}
 }
 
-func getIncrementalChange(source, increment *com_variflight_middleware_gateway_cache.ChangeMeta) {
-	if increment.Type == com_variflight_middleware_gateway_cache.ChangeMeta_unchanged {
+func getIncrementalChange(source, increment *ChangeMeta) {
+	if increment.Type == ChangeType_Unchange {
 		return
 	}
-	if increment.Type == com_variflight_middleware_gateway_cache.ChangeMeta_created || increment.Type == com_variflight_middleware_gateway_cache.ChangeMeta_deleted {
-		source.Fields = nil
+	if increment.Type == ChangeType_Create || increment.Type == ChangeType_Delete {
+		source.FieldChanges = nil
 		source.MapBool = nil
 		source.MapInt32 = nil
 		source.MapInt64 = nil
@@ -251,16 +250,16 @@ func getIncrementalChange(source, increment *com_variflight_middleware_gateway_c
 		source.Type = increment.Type
 		return
 	}
-	source.Type = com_variflight_middleware_gateway_cache.ChangeMeta_updated
-	if increment.Fields != nil {
-		for fieldIdx, change := range increment.Fields {
-			if oldChange, exists := source.Fields[fieldIdx]; exists {
+	source.Type = ChangeType_Update
+	if increment.FieldChanges != nil {
+		for fieldIdx, change := range increment.FieldChanges {
+			if oldChange, exists := source.FieldChanges[fieldIdx]; exists {
 				getIncrementalChange(oldChange, change)
 			} else {
-				if source.Fields == nil {
-					source.Fields = map[int32]*com_variflight_middleware_gateway_cache.ChangeMeta{}
+				if source.FieldChanges == nil {
+					source.FieldChanges = map[int32]*ChangeMeta{}
 				}
-				source.Fields[fieldIdx] = change
+				source.FieldChanges[fieldIdx] = change
 			}
 		}
 	}
@@ -270,7 +269,7 @@ func getIncrementalChange(source, increment *com_variflight_middleware_gateway_c
 				getIncrementalChange(oldChange, change)
 			} else {
 				if source.MapBool == nil {
-					source.MapBool = map[bool]*com_variflight_middleware_gateway_cache.ChangeMeta{}
+					source.MapBool = map[bool]*ChangeMeta{}
 				}
 				source.MapBool[fieldIdx] = change
 			}
@@ -282,7 +281,7 @@ func getIncrementalChange(source, increment *com_variflight_middleware_gateway_c
 				getIncrementalChange(oldChange, change)
 			} else {
 				if source.MapInt32 == nil {
-					source.MapInt32 = map[int32]*com_variflight_middleware_gateway_cache.ChangeMeta{}
+					source.MapInt32 = map[int32]*ChangeMeta{}
 				}
 				source.MapInt32[fieldIdx] = change
 			}
@@ -294,7 +293,7 @@ func getIncrementalChange(source, increment *com_variflight_middleware_gateway_c
 				getIncrementalChange(oldChange, change)
 			} else {
 				if source.MapInt64 == nil {
-					source.MapInt64 = map[int64]*com_variflight_middleware_gateway_cache.ChangeMeta{}
+					source.MapInt64 = map[int64]*ChangeMeta{}
 				}
 				source.MapInt64[fieldIdx] = change
 			}
@@ -306,7 +305,7 @@ func getIncrementalChange(source, increment *com_variflight_middleware_gateway_c
 				getIncrementalChange(oldChange, change)
 			} else {
 				if source.MapString == nil {
-					source.MapString = map[string]*com_variflight_middleware_gateway_cache.ChangeMeta{}
+					source.MapString = map[string]*ChangeMeta{}
 				}
 				source.MapString[fieldIdx] = change
 			}

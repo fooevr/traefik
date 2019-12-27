@@ -3,7 +3,6 @@ package cache
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	dynamicProto "github.com/jhump/protoreflect/dynamic"
@@ -46,7 +45,7 @@ func Test() {
 	time.Sleep(1000)
 	CacheManager.SetVersionCache("a", time.Now().Unix(), msg2, msgDesc, 3000)
 	msg, change, _, hit = CacheManager.GetVersionCache("a", v1)
-	bts, _ := proto.Marshal(change)
+	//bts, _ := proto.Marshal(change)
 
-	fmt.Println(hit, msg, change, bts)
+	fmt.Println(hit, msg, change)
 }

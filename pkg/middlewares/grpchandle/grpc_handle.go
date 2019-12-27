@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/containous/traefik/v2/pkg/cache"
 	_ "github.com/containous/traefik/v2/pkg/cache"
+	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	"github.com/containous/traefik/v2/pkg/config/dynamic"
 	"github.com/containous/traefik/v2/pkg/log"
 	"github.com/containous/traefik/v2/pkg/middlewares"
@@ -22,7 +23,9 @@ import (
 	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
 	"io/ioutil"
+	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -222,6 +225,39 @@ func writeCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http
 		cache.CacheManager.SetVersionCache(cacheId, time.Now().Unix(), msg, methodDesc.GetOutputType(), a.ttl.Milliseconds())
 	} else {
 		cache.CacheManager.SetNoVersionCache(cacheId, newRw.buffer.Bytes(), a.ttl.Milliseconds())
+	}
+}
+
+func changeMetaToProto(change *cache.ChangeMeta, messageDesc *desc.MessageDescriptor) (cache.ChangeType, *com_variflight_middleware_gateway_cache.ChangeDesc) {
+	if change.Type == cache.ChangeType_Create {
+		return cache.ChangeType_Create, nil
+	}
+	if change.Type == cache.ChangeType_Delete {
+		return cache.ChangeType_Delete, nil
+	}
+	if change.Type == cache.ChangeType_Unchange {
+		return cache.ChangeType_Unchange, nil
+	}
+	result := &com_variflight_middleware_gateway_cache.ChangeDesc{
+		FieldTags:         make([]byte, math.Ceil(float64(len(messageDesc.GetFields()))/4)),
+		ChangeTags:        make([]byte, math.Ceil(float64(len(messageDesc.GetFields()))/8)),
+		FieldsChangeMetas: []*com_variflight_middleware_gateway_cache.ChangeDesc{},
+	}
+	fieldNumbers := []int{}
+	for _, f := range messageDesc.GetFields() {
+		fieldNumbers = append(fieldNumbers, int(f.GetNumber()))
+	}
+	sort.Ints(fieldNumbers)
+	for num, change := range change.FieldChanges {
+		idxOfMessage := 0
+		for idx, item := range fieldNumbers {
+			if item == int(num) {
+				idxOfMessage = idx
+				break
+			}
+		}
+		result.FieldTags[int(math.Ceil(float64(idxOfMessage)/4))] = result.FieldTags[int(math.Ceil(float64(idxOfMessage)/4))]&^(0b11000000>>((idxOfMessage%4)*2)) | change.Type
+		result.ChangeTags[int(math.Ceil(float64(idxOfMessage)))]
 	}
 }
 
