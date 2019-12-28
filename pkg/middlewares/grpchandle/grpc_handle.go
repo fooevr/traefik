@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"github.com/containous/traefik/v2/pkg/cache"
 	_ "github.com/containous/traefik/v2/pkg/cache"
-	com_variflight_middleware_gateway_cache "github.com/containous/traefik/v2/pkg/cache/proto"
 	"github.com/containous/traefik/v2/pkg/config/dynamic"
 	"github.com/containous/traefik/v2/pkg/log"
 	"github.com/containous/traefik/v2/pkg/middlewares"
@@ -23,9 +22,7 @@ import (
 	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
 	"io/ioutil"
-	"math"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,12 +65,18 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 	if config.MaxVersionCount == 0 {
 		result.maxVersionCount = 200
 	}
+
+	wrapperFs := new(descriptor.FileDescriptorSet)
+	wrapperByte, _ := base64.StdEncoding.DecodeString("Cv4DCh5nb29nbGUvcHJvdG9idWYvd3JhcHBlcnMucHJvdG8SD2dvb2dsZS5wcm90b2J1ZiIjCgtEb3VibGVWYWx1ZRIUCgV2YWx1ZRgBIAEoAVIFdmFsdWUiIgoKRmxvYXRWYWx1ZRIUCgV2YWx1ZRgBIAEoAlIFdmFsdWUiIgoKSW50NjRWYWx1ZRIUCgV2YWx1ZRgBIAEoA1IFdmFsdWUiIwoLVUludDY0VmFsdWUSFAoFdmFsdWUYASABKARSBXZhbHVlIiIKCkludDMyVmFsdWUSFAoFdmFsdWUYASABKAVSBXZhbHVlIiMKC1VJbnQzMlZhbHVlEhQKBXZhbHVlGAEgASgNUgV2YWx1ZSIhCglCb29sVmFsdWUSFAoFdmFsdWUYASABKAhSBXZhbHVlIiMKC1N0cmluZ1ZhbHVlEhQKBXZhbHVlGAEgASgJUgV2YWx1ZSIiCgpCeXRlc1ZhbHVlEhQKBXZhbHVlGAEgASgMUgV2YWx1ZUJ8ChNjb20uZ29vZ2xlLnByb3RvYnVmQg1XcmFwcGVyc1Byb3RvUAFaKmdpdGh1Yi5jb20vZ29sYW5nL3Byb3RvYnVmL3B0eXBlcy93cmFwcGVyc/gBAaICA0dQQqoCHkdvb2dsZS5Qcm90b2J1Zi5XZWxsS25vd25UeXBlc2IGcHJvdG8z")
+	wrapperFs.XXX_Unmarshal(wrapperByte)
+
 	fs := new(descriptor.FileDescriptorSet)
 	descBytes, _ := base64.StdEncoding.DecodeString(config.Desc)
 	err := fs.XXX_Unmarshal(descBytes)
 	if err != nil {
 		logger.Error("can't parse desc")
 	}
+	fs.File = append(fs.File, wrapperFs.File...)
 	files, _ := desc.CreateFileDescriptorsFromSet(fs)
 	for _, file := range files {
 		for _, msgType := range file.GetMessageTypes() {
@@ -169,7 +172,7 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 	locker.RLock()
 	defer locker.RUnlock()
 	if a.incremental {
-		cache, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
+		cache, ct, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
 		if hit {
 			cacheBytes, err := cache.Marshal()
 			if err != nil {
@@ -193,6 +196,7 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 			rw.Header().Add("Trailer:Grpc-Status", "0")
 			rw.Header().Add("ts", strconv.FormatInt(version, 10))
 			rw.Header().Add("cm", base64.StdEncoding.EncodeToString(cmBts))
+			rw.Header().Add("ct", fmt.Sprintf("%x", ct))
 			rw.WriteHeader(200)
 			rw.Write(buffer.Bytes())
 			return true
@@ -225,39 +229,6 @@ func writeCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http
 		cache.CacheManager.SetVersionCache(cacheId, time.Now().Unix(), msg, methodDesc.GetOutputType(), a.ttl.Milliseconds())
 	} else {
 		cache.CacheManager.SetNoVersionCache(cacheId, newRw.buffer.Bytes(), a.ttl.Milliseconds())
-	}
-}
-
-func changeMetaToProto(change *cache.ChangeMeta, messageDesc *desc.MessageDescriptor) (cache.ChangeType, *com_variflight_middleware_gateway_cache.ChangeDesc) {
-	if change.Type == cache.ChangeType_Create {
-		return cache.ChangeType_Create, nil
-	}
-	if change.Type == cache.ChangeType_Delete {
-		return cache.ChangeType_Delete, nil
-	}
-	if change.Type == cache.ChangeType_Unchange {
-		return cache.ChangeType_Unchange, nil
-	}
-	result := &com_variflight_middleware_gateway_cache.ChangeDesc{
-		FieldTags:         make([]byte, math.Ceil(float64(len(messageDesc.GetFields()))/4)),
-		ChangeTags:        make([]byte, math.Ceil(float64(len(messageDesc.GetFields()))/8)),
-		FieldsChangeMetas: []*com_variflight_middleware_gateway_cache.ChangeDesc{},
-	}
-	fieldNumbers := []int{}
-	for _, f := range messageDesc.GetFields() {
-		fieldNumbers = append(fieldNumbers, int(f.GetNumber()))
-	}
-	sort.Ints(fieldNumbers)
-	for num, change := range change.FieldChanges {
-		idxOfMessage := 0
-		for idx, item := range fieldNumbers {
-			if item == int(num) {
-				idxOfMessage = idx
-				break
-			}
-		}
-		result.FieldTags[int(math.Ceil(float64(idxOfMessage)/4))] = result.FieldTags[int(math.Ceil(float64(idxOfMessage)/4))]&^(0b11000000>>((idxOfMessage%4)*2)) | change.Type
-		result.ChangeTags[int(math.Ceil(float64(idxOfMessage)))]
 	}
 }
 

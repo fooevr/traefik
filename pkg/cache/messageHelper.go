@@ -1,11 +1,14 @@
 package cache
 
 import (
+	"fmt"
+	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"log"
 	"reflect"
+	"strings"
 )
 
 func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *ChangeMeta {
@@ -37,17 +40,24 @@ func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *ChangeMeta {
 			if rc.Type != ChangeType_Unchange {
 				change.FieldChanges[field.GetNumber()] = rc
 			}
-		} else if field.GetMessageType() != nil {
+		} else if field.GetMessageType() != nil && !strings.HasPrefix(field.GetMessageType().GetFullyQualifiedName(), "google.protobuf.") {
+			fmt.Println(field.GetMessageType().GetFullyQualifiedName())
 			mc := mergeAndDiffMessage(oldMessage.GetField(field).(*dynamic.Message), incrMessage.GetField(field).(*dynamic.Message))
 			if mc.Type != ChangeType_Unchange {
 				change.FieldChanges[field.GetNumber()] = mc
 			}
 		} else {
-			ov := oldMessage.GetField(field)
-			nv := incrMessage.GetField(field)
-			if ov != nv {
+			diff := false
+			if field.GetMessageType() != nil && strings.HasPrefix(field.GetMessageType().GetFullyQualifiedName(), "google.protobuf.") {
+				diff = !proto.Equal(oldMessage.GetField(field).(proto.Message), incrMessage.GetField(field).(proto.Message))
+			} else {
+				ov := oldMessage.GetField(field)
+				nv := incrMessage.GetField(field)
+				diff = ov != nv
+			}
+			if diff {
 				change.FieldChanges[field.GetNumber()] = &ChangeMeta{Type: ChangeType_Update}
-				oldMessage.SetField(field, nv)
+				oldMessage.SetField(field, incrMessage.GetField(field))
 			}
 		}
 	}
@@ -193,10 +203,10 @@ func getIncrementalMessage(fullMessage, incrementalMessage *dynamic.Message, cha
 			getIncrementalMap(fullMessage, incrementalMessage, field, fieldChange)
 		} else if field.IsRepeated() {
 			incrementalMessage.SetField(field, fullMessage.GetField(field))
-		} else if field.GetMessageType() != nil {
-			getIncrementalMessage(fullMessage.GetField(field).(*dynamic.Message), incrementalMessage.GetField(field).(*dynamic.Message), fieldChange)
-		} else {
+		} else if field.GetMessageType() == nil || strings.HasPrefix(field.GetMessageType().GetFullyQualifiedName(), "google.protobuf.") {
 			incrementalMessage.SetField(field, fullMessage.GetField(field))
+		} else {
+			getIncrementalMessage(fullMessage.GetField(field).(*dynamic.Message), incrementalMessage.GetField(field).(*dynamic.Message), fieldChange)
 		}
 	}
 }

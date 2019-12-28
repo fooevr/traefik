@@ -43,7 +43,7 @@ require (
 	github.com/go-acme/lego/v3 v3.2.0
 	github.com/go-check/check v0.0.0-00010101000000-000000000000
 	github.com/go-kit/kit v0.9.0
-	github.com/gogo/protobuf v1.2.0
+	github.com/gogo/protobuf v1.2.1
 	github.com/golang/protobuf v1.3.2
 	github.com/google/go-github/v28 v28.0.0
 	github.com/googleapis/gnostic v0.1.0 // indirect
@@ -80,6 +80,8 @@ require (
 	github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4
 	github.com/rancher/go-rancher-metadata v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.4.2
+	github.com/smartystreets/goconvey v1.6.4 // indirect
+	github.com/spf13/pflag v1.0.3 // indirect
 	github.com/stretchr/testify v1.4.0
 	github.com/stvp/go-udp-testing v0.0.0-20171104055251-c4434f09ec13
 	github.com/tinylib/msgp v1.0.2 // indirect
@@ -98,8 +100,9 @@ require (
 	google.golang.org/grpc v1.22.1
 	gopkg.in/DataDog/dd-trace-go.v1 v1.16.1
 	gopkg.in/fsnotify.v1 v1.4.7
+	gopkg.in/ini.v1 v1.51.0 // indirect
 	gopkg.in/jcmturner/goidentity.v3 v3.0.0 // indirect
-	gopkg.in/yaml.v2 v2.2.2
+	gopkg.in/yaml.v2 v2.2.4
 	gotest.tools v2.2.0+incompatible // indirect
 	k8s.io/api v0.0.0-20190718183219-b59d8169aab5
 	k8s.io/apimachinery v0.0.0-20190612205821-1799e75a0719
