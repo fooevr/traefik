@@ -1,13 +1,13 @@
 syntax = "proto3";
 
-package com.variflight.dataservice.sys;
+package com.variflight.dataservice;
 
-option csharp_namespace = "com.variflight.dataservice.sys";
+option csharp_namespace = "com.variflight.dataservice";
 option cc_enable_arenas = true;
-option go_package = "variflight.com/dataservice/sys";
-option java_package = "com.variflight.dataservice/sys";
+option go_package = "variflight.com/dataservice";
+option java_package = "com.variflight.dataservice";
 option java_multiple_files = false;
-option objc_class_prefix = "DSSYS";
+option objc_class_prefix = "DS";
 
 // 变更描述，可以表示一个Message或Message中一个Map的变更元数据
 // 如果是用于描述Message,则使用fieldTags, changeTags, fieldChangeMetas来描述这个Message中每个field的是否变化和变化内容，具体见相应的字段描述

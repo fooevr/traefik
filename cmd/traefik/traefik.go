@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/containous/traefik/v2/pkg/cache"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -39,8 +38,6 @@ import (
 )
 
 func main() {
-	cache.Test()
-
 	// traefik config inits
 	tConfig := cmd.NewTraefikConfiguration()
 

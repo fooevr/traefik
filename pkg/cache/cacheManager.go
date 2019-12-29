@@ -58,7 +58,7 @@ func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit 
 	return cd.([]byte), hit
 }
 
-func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, ct ChangeType, changeDesc *sys.ChangeDesc, newVersion int64, hit bool) {
+func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, ct ChangeType, changeDesc *dataservice.ChangeDesc, newVersion int64, hit bool) {
 	cd, hit := m.c.Get(id)
 	if !hit {
 		return nil, ChangeType_Unchange, nil, 0, false
@@ -165,14 +165,14 @@ var CacheManager = &cacheManager{
 // 0b00 unchanged, 0b01 create, 0b10 update, 0b11 delete
 // CD.CT中每1bit表示一个Field是否有对应的ChangeDesc,与CD.FT相同，按message中field的number排序。
 // CD.FCD表示字段的变更描述数组，与CD.CT中的标示顺序对应。
-func messageChangeMetaToProto(msgChange *ChangeMeta, messageDesc *desc.MessageDescriptor) *sys.ChangeDesc {
+func messageChangeMetaToProto(msgChange *ChangeMeta, messageDesc *desc.MessageDescriptor) *dataservice.ChangeDesc {
 	if msgChange.FieldChanges == nil && len(msgChange.FieldChanges) == 0 {
 		return nil
 	}
-	result := &sys.ChangeDesc{
+	result := &dataservice.ChangeDesc{
 		FieldTags:         make([]byte, int(math.Ceil(float64(len(messageDesc.GetFields()))/4))),
 		ChangeTags:        make([]byte, int(math.Ceil(float64(len(messageDesc.GetFields()))/8))),
-		FieldsChangeDescs: []*sys.ChangeDesc{},
+		FieldsChangeDescs: []*dataservice.ChangeDesc{},
 	}
 	fieldNumbers := []int{}
 	for _, f := range messageDesc.GetFields() {
@@ -194,7 +194,7 @@ func messageChangeMetaToProto(msgChange *ChangeMeta, messageDesc *desc.MessageDe
 				continue
 			}
 			fieldDesc := messageDesc.FindFieldByNumber(num)
-			var fieldChange *sys.ChangeDesc
+			var fieldChange *dataservice.ChangeDesc
 			if fieldDesc.IsMap() {
 				fieldChange = mapChangeMetaToProto(change, fieldDesc)
 			} else if fieldDesc.IsRepeated() {
@@ -211,24 +211,24 @@ func messageChangeMetaToProto(msgChange *ChangeMeta, messageDesc *desc.MessageDe
 	return result
 }
 
-func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *sys.ChangeDesc {
-	result := &sys.ChangeDesc{}
+func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *dataservice.ChangeDesc {
+	result := &dataservice.ChangeDesc{}
 	if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_BOOL {
 		for k, c := range change.MapBool {
 			if result.MapBool == nil {
-				result.MapBool = map[bool]*sys.ChangeDesc{}
+				result.MapBool = map[bool]*dataservice.ChangeDesc{}
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
 					result.MapBool[k] = nil
 				} else {
-					result.MapBool[k] = &sys.ChangeDesc{}
+					result.MapBool[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
 					result.MapBool[k] = nil
 				} else if c.Type == ChangeType_Create {
-					result.MapBool[k] = &sys.ChangeDesc{}
+					result.MapBool[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapBool[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}
@@ -237,19 +237,19 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *s
 	} else if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT32 {
 		for k, c := range change.MapInt32 {
 			if result.MapInt32 == nil {
-				result.MapInt32 = map[int32]*sys.ChangeDesc{}
+				result.MapInt32 = map[int32]*dataservice.ChangeDesc{}
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
 					result.MapInt32[k] = nil
 				} else {
-					result.MapInt32[k] = &sys.ChangeDesc{}
+					result.MapInt32[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
 					result.MapInt32[k] = nil
 				} else if c.Type == ChangeType_Create {
-					result.MapInt32[k] = &sys.ChangeDesc{}
+					result.MapInt32[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapInt32[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}
@@ -258,19 +258,19 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *s
 	} else if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_INT64 {
 		for k, c := range change.MapInt64 {
 			if result.MapInt64 == nil {
-				result.MapInt64 = map[int64]*sys.ChangeDesc{}
+				result.MapInt64 = map[int64]*dataservice.ChangeDesc{}
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
 					result.MapInt64[k] = nil
 				} else {
-					result.MapInt64[k] = &sys.ChangeDesc{}
+					result.MapInt64[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
 					result.MapInt64[k] = nil
 				} else if c.Type == ChangeType_Create {
-					result.MapInt64[k] = &sys.ChangeDesc{}
+					result.MapInt64[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapInt64[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}
@@ -279,19 +279,19 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *s
 	} else if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_STRING {
 		for k, c := range change.MapString {
 			if result.MapString == nil {
-				result.MapString = map[string]*sys.ChangeDesc{}
+				result.MapString = map[string]*dataservice.ChangeDesc{}
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
 					result.MapString[k] = nil
 				} else {
-					result.MapString[k] = &sys.ChangeDesc{}
+					result.MapString[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
 					result.MapString[k] = nil
 				} else if c.Type == ChangeType_Create {
-					result.MapString[k] = &sys.ChangeDesc{}
+					result.MapString[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapString[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}

@@ -21,6 +21,7 @@ import (
 	gca "github.com/patrickmn/go-cache"
 	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -114,7 +115,8 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	var clientVersion int64
 	if req.Header.Get("ts") == "" {
 		rw.Write([]byte("miss ts field in request headers."))
-		rw.WriteHeader(http.StatusBadRequest)
+		rw.WriteHeader(int(codes.Unknown))
+		a.next.ServeHTTP(rw, req)
 		return
 	}
 	if v, err := strconv.ParseInt(req.Header.Get("ts"), 10, 64); err != nil {
