@@ -3,12 +3,15 @@ package grpchandle
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/base64"
 	"encoding/binary"
 	_ "encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"github.com/containous/traefik/v2/pkg/cache"
 	_ "github.com/containous/traefik/v2/pkg/cache"
+	dataservice "github.com/containous/traefik/v2/pkg/cache/proto/sys"
 	"github.com/containous/traefik/v2/pkg/config/dynamic"
 	"github.com/containous/traefik/v2/pkg/log"
 	"github.com/containous/traefik/v2/pkg/middlewares"
@@ -68,7 +71,7 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 	}
 
 	wrapperFs := new(descriptor.FileDescriptorSet)
-	wrapperByte, _ := base64.StdEncoding.DecodeString("Cv4DCh5nb29nbGUvcHJvdG9idWYvd3JhcHBlcnMucHJvdG8SD2dvb2dsZS5wcm90b2J1ZiIjCgtEb3VibGVWYWx1ZRIUCgV2YWx1ZRgBIAEoAVIFdmFsdWUiIgoKRmxvYXRWYWx1ZRIUCgV2YWx1ZRgBIAEoAlIFdmFsdWUiIgoKSW50NjRWYWx1ZRIUCgV2YWx1ZRgBIAEoA1IFdmFsdWUiIwoLVUludDY0VmFsdWUSFAoFdmFsdWUYASABKARSBXZhbHVlIiIKCkludDMyVmFsdWUSFAoFdmFsdWUYASABKAVSBXZhbHVlIiMKC1VJbnQzMlZhbHVlEhQKBXZhbHVlGAEgASgNUgV2YWx1ZSIhCglCb29sVmFsdWUSFAoFdmFsdWUYASABKAhSBXZhbHVlIiMKC1N0cmluZ1ZhbHVlEhQKBXZhbHVlGAEgASgJUgV2YWx1ZSIiCgpCeXRlc1ZhbHVlEhQKBXZhbHVlGAEgASgMUgV2YWx1ZUJ8ChNjb20uZ29vZ2xlLnByb3RvYnVmQg1XcmFwcGVyc1Byb3RvUAFaKmdpdGh1Yi5jb20vZ29sYW5nL3Byb3RvYnVmL3B0eXBlcy93cmFwcGVyc/gBAaICA0dQQqoCHkdvb2dsZS5Qcm90b2J1Zi5XZWxsS25vd25UeXBlc2IGcHJvdG8z")
+	wrapperByte, _ := base64.StdEncoding.DecodeString("Ct0BChlnb29nbGUvcHJvdG9idWYvYW55LnByb3RvEg9nb29nbGUucHJvdG9idWYiNgoDQW55EhkKCHR5cGVfdXJsGAEgASgJUgd0eXBlVXJsEhQKBXZhbHVlGAIgASgMUgV2YWx1ZUJvChNjb20uZ29vZ2xlLnByb3RvYnVmQghBbnlQcm90b1ABWiVnaXRodWIuY29tL2dvbGFuZy9wcm90b2J1Zi9wdHlwZXMvYW55ogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90bzMK8wEKHmdvb2dsZS9wcm90b2J1Zi9kdXJhdGlvbi5wcm90bxIPZ29vZ2xlLnByb3RvYnVmIjoKCER1cmF0aW9uEhgKB3NlY29uZHMYASABKANSB3NlY29uZHMSFAoFbmFub3MYAiABKAVSBW5hbm9zQnwKE2NvbS5nb29nbGUucHJvdG9idWZCDUR1cmF0aW9uUHJvdG9QAVoqZ2l0aHViLmNvbS9nb2xhbmcvcHJvdG9idWYvcHR5cGVzL2R1cmF0aW9u+AEBogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90bzMKtwEKG2dvb2dsZS9wcm90b2J1Zi9lbXB0eS5wcm90bxIPZ29vZ2xlLnByb3RvYnVmIgcKBUVtcHR5QnYKE2NvbS5nb29nbGUucHJvdG9idWZCCkVtcHR5UHJvdG9QAVonZ2l0aHViLmNvbS9nb2xhbmcvcHJvdG9idWYvcHR5cGVzL2VtcHR5+AEBogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90bzMK7QEKIGdvb2dsZS9wcm90b2J1Zi9maWVsZF9tYXNrLnByb3RvEg9nb29nbGUucHJvdG9idWYiIQoJRmllbGRNYXNrEhQKBXBhdGhzGAEgAygJUgVwYXRoc0KMAQoTY29tLmdvb2dsZS5wcm90b2J1ZkIORmllbGRNYXNrUHJvdG9QAVo5Z29vZ2xlLmdvbGFuZy5vcmcvZ2VucHJvdG8vcHJvdG9idWYvZmllbGRfbWFzaztmaWVsZF9tYXNr+AEBogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90bzMKhQIKJGdvb2dsZS9wcm90b2J1Zi9zb3VyY2VfY29udGV4dC5wcm90bxIPZ29vZ2xlLnByb3RvYnVmIiwKDVNvdXJjZUNvbnRleHQSGwoJZmlsZV9uYW1lGAEgASgJUghmaWxlTmFtZUKVAQoTY29tLmdvb2dsZS5wcm90b2J1ZkISU291cmNlQ29udGV4dFByb3RvUAFaQWdvb2dsZS5nb2xhbmcub3JnL2dlbnByb3RvL3Byb3RvYnVmL3NvdXJjZV9jb250ZXh0O3NvdXJjZV9jb250ZXh0ogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90bzMK5QUKHGdvb2dsZS9wcm90b2J1Zi9zdHJ1Y3QucHJvdG8SD2dvb2dsZS5wcm90b2J1ZiKYAQoGU3RydWN0EjsKBmZpZWxkcxgBIAMoCzIjLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QuRmllbGRzRW50cnlSBmZpZWxkcxpRCgtGaWVsZHNFbnRyeRIQCgNrZXkYASABKAlSA2tleRIsCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZVIFdmFsdWU6AjgBIrICCgVWYWx1ZRI7CgpudWxsX3ZhbHVlGAEgASgOMhouZ29vZ2xlLnByb3RvYnVmLk51bGxWYWx1ZUgAUgludWxsVmFsdWUSIwoMbnVtYmVyX3ZhbHVlGAIgASgBSABSC251bWJlclZhbHVlEiMKDHN0cmluZ192YWx1ZRgDIAEoCUgAUgtzdHJpbmdWYWx1ZRIfCgpib29sX3ZhbHVlGAQgASgISABSCWJvb2xWYWx1ZRI8CgxzdHJ1Y3RfdmFsdWUYBSABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0SABSC3N0cnVjdFZhbHVlEjsKCmxpc3RfdmFsdWUYBiABKAsyGi5nb29nbGUucHJvdG9idWYuTGlzdFZhbHVlSABSCWxpc3RWYWx1ZUIGCgRraW5kIjsKCUxpc3RWYWx1ZRIuCgZ2YWx1ZXMYASADKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWVSBnZhbHVlcyobCglOdWxsVmFsdWUSDgoKTlVMTF9WQUxVRRAAQoEBChNjb20uZ29vZ2xlLnByb3RvYnVmQgtTdHJ1Y3RQcm90b1ABWjFnaXRodWIuY29tL2dvbGFuZy9wcm90b2J1Zi9wdHlwZXMvc3RydWN0O3N0cnVjdHBi+AEBogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90bzMK9wEKH2dvb2dsZS9wcm90b2J1Zi90aW1lc3RhbXAucHJvdG8SD2dvb2dsZS5wcm90b2J1ZiI7CglUaW1lc3RhbXASGAoHc2Vjb25kcxgBIAEoA1IHc2Vjb25kcxIUCgVuYW5vcxgCIAEoBVIFbmFub3NCfgoTY29tLmdvb2dsZS5wcm90b2J1ZkIOVGltZXN0YW1wUHJvdG9QAVorZ2l0aHViLmNvbS9nb2xhbmcvcHJvdG9idWYvcHR5cGVzL3RpbWVzdGFtcPgBAaICA0dQQqoCHkdvb2dsZS5Qcm90b2J1Zi5XZWxsS25vd25UeXBlc2IGcHJvdG8zCv4DCh5nb29nbGUvcHJvdG9idWYvd3JhcHBlcnMucHJvdG8SD2dvb2dsZS5wcm90b2J1ZiIjCgtEb3VibGVWYWx1ZRIUCgV2YWx1ZRgBIAEoAVIFdmFsdWUiIgoKRmxvYXRWYWx1ZRIUCgV2YWx1ZRgBIAEoAlIFdmFsdWUiIgoKSW50NjRWYWx1ZRIUCgV2YWx1ZRgBIAEoA1IFdmFsdWUiIwoLVUludDY0VmFsdWUSFAoFdmFsdWUYASABKARSBXZhbHVlIiIKCkludDMyVmFsdWUSFAoFdmFsdWUYASABKAVSBXZhbHVlIiMKC1VJbnQzMlZhbHVlEhQKBXZhbHVlGAEgASgNUgV2YWx1ZSIhCglCb29sVmFsdWUSFAoFdmFsdWUYASABKAhSBXZhbHVlIiMKC1N0cmluZ1ZhbHVlEhQKBXZhbHVlGAEgASgJUgV2YWx1ZSIiCgpCeXRlc1ZhbHVlEhQKBXZhbHVlGAEgASgMUgV2YWx1ZUJ8ChNjb20uZ29vZ2xlLnByb3RvYnVmQg1XcmFwcGVyc1Byb3RvUAFaKmdpdGh1Yi5jb20vZ29sYW5nL3Byb3RvYnVmL3B0eXBlcy93cmFwcGVyc/gBAaICA0dQQqoCHkdvb2dsZS5Qcm90b2J1Zi5XZWxsS25vd25UeXBlc2IGcHJvdG8z")
 	wrapperFs.XXX_Unmarshal(wrapperByte)
 
 	fs := new(descriptor.FileDescriptorSet)
@@ -78,7 +81,10 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 		logger.Error("can't parse desc")
 	}
 	fs.File = append(fs.File, wrapperFs.File...)
-	files, _ := desc.CreateFileDescriptorsFromSet(fs)
+	files, err := desc.CreateFileDescriptorsFromSet(fs)
+	if err != nil {
+		logger.Panic(err)
+	}
 	for _, file := range files {
 		for _, msgType := range file.GetMessageTypes() {
 			result.messages[msgType.GetFullyQualifiedName()] = msgType
@@ -115,8 +121,8 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	var clientVersion int64
 	if req.Header.Get("ts") == "" {
 		rw.Write([]byte("miss ts field in request headers."))
+		rw.Header().Add("en", "heng")
 		rw.WriteHeader(int(codes.Unknown))
-		a.next.ServeHTTP(rw, req)
 		return
 	}
 	if v, err := strconv.ParseInt(req.Header.Get("ts"), 10, 64); err != nil {
@@ -145,7 +151,9 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	cacheIdBuffer := &bytes.Buffer{}
 	cacheIdBuffer.Write([]byte(req.RequestURI))
 	cacheIdBuffer.Write(frame)
-	cacheId := base64.StdEncoding.EncodeToString(cacheIdBuffer.Bytes())
+	h := md5.New()
+	h.Write(cacheIdBuffer.Bytes())
+	cacheId := hex.EncodeToString(h.Sum(nil))
 	locker, exists := a.lockers.Get(cacheId)
 	if !exists {
 		locker = &sync.RWMutex{}
@@ -174,33 +182,23 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 	locker.RLock()
 	defer locker.RUnlock()
 	if a.incremental {
-		cache, ct, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
-		if hit {
-			cacheBytes, err := cache.Marshal()
+		ok := false
+		c, ct, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
+		if !hit {
+			c, ct, version, hit = cache.CacheManager.GetVersionFullCache(cacheId)
+			if hit {
+				ok = true
+			}
+		} else {
+			ok = true
+		}
+		if ok {
+			cacheBytes, err := c.Marshal()
 			if err != nil {
-				rw.WriteHeader(500)
+				writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 500)
 				return false
 			}
-			cmBts, err := proto.Marshal(change)
-			if err != nil {
-				rw.WriteHeader(500)
-				return false
-			}
-			buffer := &bytes.Buffer{}
-			buffer.Write([]byte{0})
-			length := make([]byte, 4)
-			binary.BigEndian.PutUint32(length, uint32(len(cacheBytes)))
-			buffer.Write(length)
-			buffer.Write(cacheBytes)
-			rw.Header().Add("Content-Type", "application/grpc")
-			rw.Header().Add("Grpc-Accept-Encoding", "gzip")
-			rw.Header().Add("Grpc-Encoding", "identity")
-			rw.Header().Add("Trailer:Grpc-Status", "0")
-			rw.Header().Add("ts", strconv.FormatInt(version, 10))
-			rw.Header().Add("cm", base64.StdEncoding.EncodeToString(cmBts))
-			rw.Header().Add("ct", fmt.Sprintf("%x", ct))
-			rw.WriteHeader(200)
-			rw.Write(buffer.Bytes())
+			writeResult(rw, cacheBytes, ct, version, change, 200)
 			return true
 		}
 	} else {
@@ -212,6 +210,35 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 		}
 	}
 	return false
+}
+
+func writeResult(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, version int64, change *dataservice.ChangeDesc, code int) {
+	buffer := &bytes.Buffer{}
+	buffer.Write([]byte{0})
+	length := make([]byte, 4)
+	if resultBts != nil {
+		binary.BigEndian.PutUint32(length, uint32(len(resultBts)))
+	} else {
+		binary.BigEndian.PutUint32(length, 0)
+	}
+	buffer.Write(length)
+	buffer.Write(resultBts)
+	rw.Header().Add("Content-Type", "application/grpc")
+	rw.Header().Add("Grpc-Accept-Encoding", "gzip")
+	rw.Header().Add("Grpc-Encoding", "identity")
+	rw.Header().Add("Trailer:Grpc-Status", "0")
+	rw.Header().Add("ts", strconv.FormatInt(version, 10))
+	if change != nil {
+		cmBts, err := proto.Marshal(change)
+		if err != nil {
+			rw.WriteHeader(500)
+			return
+		}
+		rw.Header().Add("cm", base64.StdEncoding.EncodeToString(cmBts))
+	}
+	rw.Header().Add("ct", fmt.Sprintf("%x", ct))
+	rw.WriteHeader(200)
+	rw.Write(buffer.Bytes())
 }
 
 func writeCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http.Request, newRw *cacheResponse, methodDesc *desc.MethodDescriptor, a *grpcHandle, logger log.Logger) {

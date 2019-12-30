@@ -58,6 +58,18 @@ func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit 
 	return cd.([]byte), hit
 }
 
+func (m *cacheManager) GetVersionFullCache(id string) (msg *dynamic.Message, changeType ChangeType, newVersion int64, hit bool) {
+	cd, hit := m.c.Get(id)
+	if !hit {
+		return nil, ChangeType_Unchange, 0, false
+	}
+	ci := cd.(*cacheItem)
+	if ci.latestVersion == 0 {
+		return nil, ChangeType_Unchange, 0, false
+	}
+	return ci.val.(*dynamic.Message), ChangeType_Create, ci.latestVersion, true
+}
+
 func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, ct ChangeType, changeDesc *dataservice.ChangeDesc, newVersion int64, hit bool) {
 	cd, hit := m.c.Get(id)
 	if !hit {
