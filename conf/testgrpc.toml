@@ -2,7 +2,7 @@
   [http.routers]
     [http.routers.routerTest]
       service = "testgrpc"
-      rule = "Host(`127.0.0.1`)"
+      rule = "Host(`127.0.0.1`)||Host(`10.9.9.131`)"
       middlewares=["test"]
 
   [http.services]

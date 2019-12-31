@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	_ "encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"github.com/containous/traefik/v2/pkg/cache"
 	_ "github.com/containous/traefik/v2/pkg/cache"
@@ -16,7 +17,7 @@ import (
 	"github.com/containous/traefik/v2/pkg/log"
 	"github.com/containous/traefik/v2/pkg/middlewares"
 	"github.com/containous/traefik/v2/pkg/tracing"
-	"github.com/gogo/protobuf/proto"
+	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 	dynamicProto "github.com/jhump/protoreflect/dynamic"
@@ -24,7 +25,6 @@ import (
 	gca "github.com/patrickmn/go-cache"
 	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -120,32 +120,30 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	var clientVersion int64
 	if req.Header.Get("ts") == "" {
-		rw.Write([]byte("miss ts field in request headers."))
-		rw.Header().Add("en", "heng")
-		rw.WriteHeader(int(codes.Unknown))
+		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("miss ts header"))
 		return
 	}
 	if v, err := strconv.ParseInt(req.Header.Get("ts"), 10, 64); err != nil {
-		rw.WriteHeader(http.StatusBadRequest)
+		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("ts header not int64"))
 	} else {
 		clientVersion = v
 	}
 
 	methodDesc := a.rpcs[req.RequestURI]
 	if methodDesc == nil {
-		rw.WriteHeader(404)
+		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 404, errors.New("request URI"+req.RequestURI+" is not found"))
 		return
 	}
 	bts, _ := ioutil.ReadAll(req.Body)
 	if len(bts) < 5 {
-		rw.WriteHeader(400)
+		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 404, errors.New("parse body to gRPC failed"))
 		return
 	}
 	frame := bts[5:]
 	msg := dynamicProto.NewMessage(methodDesc.GetInputType())
 	err := msg.Unmarshal(frame)
 	if err != nil {
-		rw.WriteHeader(400)
+		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("parse body to gRPC failed"))
 		return
 	}
 	cacheIdBuffer := &bytes.Buffer{}
@@ -160,7 +158,7 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		a.lockers.Add(cacheId, locker, 0)
 	}
 	if readCache(locker.(*sync.RWMutex), a, cacheId, clientVersion, rw) {
-		a.next.ServeHTTP(rw, req)
+		//a.next.ServeHTTP(rw, req)
 		return
 	}
 	newRw := &cacheResponse{
@@ -195,10 +193,10 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 		if ok {
 			cacheBytes, err := c.Marshal()
 			if err != nil {
-				writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 500)
+				writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 500, err)
 				return false
 			}
-			writeResult(rw, cacheBytes, ct, version, change, 200)
+			writeResult(rw, cacheBytes, ct, version, change, 200, nil)
 			return true
 		}
 	} else {
@@ -212,7 +210,7 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 	return false
 }
 
-func writeResult(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, version int64, change *dataservice.ChangeDesc, code int) {
+func writeResult(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, version int64, change *dataservice.ChangeDesc, code int, err error) {
 	buffer := &bytes.Buffer{}
 	buffer.Write([]byte{0})
 	length := make([]byte, 4)
@@ -231,13 +229,16 @@ func writeResult(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, 
 	if change != nil {
 		cmBts, err := proto.Marshal(change)
 		if err != nil {
-			rw.WriteHeader(500)
+			rw.WriteHeader(code)
 			return
 		}
 		rw.Header().Add("cm", base64.StdEncoding.EncodeToString(cmBts))
 	}
-	rw.Header().Add("ct", fmt.Sprintf("%x", ct))
-	rw.WriteHeader(200)
+	if err != nil {
+		rw.Header().Add("reason", err.Error())
+	}
+	rw.Header().Add("ct", string(ct))
+	rw.WriteHeader(code)
 	rw.Write(buffer.Bytes())
 }
 
@@ -247,7 +248,6 @@ func writeCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http
 	req.Body = ioutil.NopCloser(bytes.NewReader(reqBytes))
 
 	a.next.ServeHTTP(newRw, req)
-
 	if a.incremental {
 		msg := dynamicProto.NewMessage(methodDesc.GetOutputType())
 		err := msg.Unmarshal(newRw.buffer.Bytes()[5:])
