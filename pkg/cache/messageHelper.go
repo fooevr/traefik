@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
@@ -41,7 +40,6 @@ func mergeAndDiffMessage(oldMessage, incrMessage *dynamic.Message) *ChangeMeta {
 				change.FieldChanges[field.GetNumber()] = rc
 			}
 		} else if field.GetMessageType() != nil && !strings.HasPrefix(field.GetMessageType().GetFullyQualifiedName(), "google.protobuf.") {
-			fmt.Println(field.GetMessageType().GetFullyQualifiedName())
 			mc := mergeAndDiffMessage(oldMessage.GetField(field).(*dynamic.Message), incrMessage.GetField(field).(*dynamic.Message))
 			if mc.Type != ChangeType_Unchange {
 				change.FieldChanges[field.GetNumber()] = mc
@@ -195,9 +193,6 @@ func getIncrementalMessage(fullMessage, incrementalMessage *dynamic.Message, cha
 		} else if fieldChange.Type == ChangeType_Delete {
 			incrementalMessage.ClearField(field)
 			continue
-		} else if checkNoFieldOrNil(field, incrementalMessage) {
-			incrementalMessage.SetField(field, fullMessage.GetField(field))
-			continue
 		}
 		if field.IsMap() {
 			getIncrementalMap(fullMessage, incrementalMessage, field, fieldChange)
@@ -206,7 +201,14 @@ func getIncrementalMessage(fullMessage, incrementalMessage *dynamic.Message, cha
 		} else if field.GetMessageType() == nil || strings.HasPrefix(field.GetMessageType().GetFullyQualifiedName(), "google.protobuf.") {
 			incrementalMessage.SetField(field, fullMessage.GetField(field))
 		} else {
-			getIncrementalMessage(fullMessage.GetField(field).(*dynamic.Message), incrementalMessage.GetField(field).(*dynamic.Message), fieldChange)
+			var msg = incrementalMessage.GetField(field).(*dynamic.Message)
+			if msg == nil {
+				msg = dynamic.NewMessage(field.GetMessageType())
+			}
+			getIncrementalMessage(fullMessage.GetField(field).(*dynamic.Message), msg, fieldChange)
+			if bts, _ := msg.Marshal(); len(bts) > 0 {
+				incrementalMessage.SetField(field, msg)
+			}
 		}
 	}
 }
@@ -239,10 +241,22 @@ func getIncrementalMap(fullMessage *dynamic.Message, incrMessage *dynamic.Messag
 			incrMessage.RemoveMapField(field, key)
 		} else if change.Type == ChangeType_Update {
 			if field.GetMapValueType().GetMessageType() != nil {
-				getIncrementalMessage(fullMessage.GetMapField(field, key).(*dynamic.Message), incrMessage.GetMapField(field, key).(*dynamic.Message), change)
+				var incrMapValue = incrMessage.GetMapField(field, key)
+				if incrMessage.GetMapField(field, key) == nil {
+					incrMapValue = dynamic.NewMessage(field.GetMapValueType().GetMessageType())
+				}
+				getIncrementalMessage(fullMessage.GetMapField(field, key).(*dynamic.Message), incrMapValue.(*dynamic.Message), change)
+				if bts, _ := incrMapValue.(*dynamic.Message).Marshal(); len(bts) > 0 {
+					incrMessage.PutMapField(field, key, incrMapValue)
+				}
 			} else {
 				incrMessage.PutMapField(field, key, fullMessage.GetMapField(field, key))
 			}
+		}
+	}
+	if !checkNoFieldOrNil(field, incrMessage) {
+		if len(incrMessage.GetField(field).(map[interface{}]interface{})) == 0 {
+			incrMessage.ClearField(field)
 		}
 	}
 }

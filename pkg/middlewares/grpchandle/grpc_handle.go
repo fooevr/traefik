@@ -169,8 +169,7 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	writeCache(cacheId, locker.(*sync.RWMutex), bts, req, newRw, methodDesc, a, logger)
 	if !readCache(locker.(*sync.RWMutex), a, cacheId, clientVersion, rw) {
-		rw.WriteHeader(newRw.code)
-		rw.Write([]byte("俺也不知道"))
+		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 500, errors.New("set cache error"))
 	} else {
 		//a.next.ServeHTTP(rw, req)
 	}
@@ -180,17 +179,8 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 	locker.RLock()
 	defer locker.RUnlock()
 	if a.incremental {
-		ok := false
 		c, ct, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
-		if !hit {
-			c, ct, version, hit = cache.CacheManager.GetVersionFullCache(cacheId)
-			if hit {
-				ok = true
-			}
-		} else {
-			ok = true
-		}
-		if ok {
+		if hit {
 			cacheBytes, err := c.Marshal()
 			if err != nil {
 				writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 500, err)
@@ -232,12 +222,12 @@ func writeResult(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, 
 			rw.WriteHeader(code)
 			return
 		}
-		rw.Header().Add("cm", base64.StdEncoding.EncodeToString(cmBts))
+		rw.Header().Add("cd-bin", base64.StdEncoding.EncodeToString(cmBts))
 	}
 	if err != nil {
-		rw.Header().Add("reason", err.Error())
+		rw.Header().Add("rs", err.Error())
 	}
-	rw.Header().Add("ct", string(ct))
+	rw.Header().Add("ct-bin", base64.StdEncoding.EncodeToString([]byte{byte(ct)}))
 	rw.WriteHeader(code)
 	rw.Write(buffer.Bytes())
 }
@@ -273,8 +263,7 @@ func (r cacheResponse) Header() http.Header {
 }
 
 func (r cacheResponse) Write(bts []byte) (int, error) {
-	r.buffer.Write(bts)
-	return len(bts), nil
+	return r.buffer.Write(bts)
 }
 
 func (r cacheResponse) WriteHeader(statusCode int) {

@@ -18,10 +18,15 @@ message ChangeDesc{
     bytes changeTags = 2;
     // Message中内嵌的Message字段或Map字段的变更描述
     repeated ChangeDesc fieldsChangeDescs = 3;
-    // Map字段的变更描述，key为map中的key，value为空，则表示该key已删除，不为空且fieldTags长度为0，则表示该key为新增或值已变更(值类型)
+    // Map字段的变更描述，key为map中的key，value.fieldTags长度为0或空，则表示该key为新增或值已变更(值类型)
     // 不为空，且fieldTags长度不为0，则表示该key对应的value为message类型的变更描述
     map<int32, ChangeDesc> map_int32 = 4;
     map<int64, ChangeDesc> map_int64 = 5;
     map<bool, ChangeDesc> map_bool = 6;
     map<string, ChangeDesc> map_string = 7;
+    // Map字段删除描述
+    map<int32, ChangeDesc> map_int32_removed = 8;
+    map<int64, ChangeDesc> map_int64_removed = 9;
+    map<bool, ChangeDesc> map_bool_removed = 10;
+    map<string, ChangeDesc> map_string_removed = 11;
 }
