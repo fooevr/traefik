@@ -245,7 +245,7 @@ func writeCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http
 			logger.Errorf("can't parse response bytes to message.")
 			return
 		}
-		cache.CacheManager.SetVersionCache(cacheId, time.Now().Unix(), msg, methodDesc.GetOutputType(), a.ttl.Milliseconds())
+		cache.CacheManager.SetVersionCache(cacheId, time.Now().Unix(), msg, methodDesc.GetOutputType(), a.ttl.Milliseconds(), a.maxVersionCount)
 	} else {
 		cache.CacheManager.SetNoVersionCache(cacheId, newRw.buffer.Bytes(), a.ttl.Milliseconds())
 	}

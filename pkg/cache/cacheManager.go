@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"fmt"
 	"github.com/containous/traefik/v2/pkg/cache/proto/sys"
 	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
@@ -123,11 +122,11 @@ func (m *cacheManager) SetNoVersionCache(id string, data []byte, ttl int64) {
 	m.c.Set(id, data, time.Duration(ttl)*time.Millisecond)
 }
 
-func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.Message, messageDesc *desc.MessageDescriptor, ttl int64) {
+func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.Message, messageDesc *desc.MessageDescriptor, ttl int64, maxVersionCount int) {
 	ci, hit := m.c.Get(id)
 	if !hit {
 		ci = &cacheItem{
-			c:           gca.New(-1, time.Minute*1),
+			c:           gca.New(-1, time.Millisecond*time.Duration(ttl*int64(maxVersionCount))),
 			versions:    sll.New(),
 			locker:      new(sync.RWMutex),
 			messageDesc: messageDesc,
@@ -160,8 +159,6 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 		ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), &ChangeMeta{Type: ChangeType_Delete}, 0)
 	} else {
 		fullMessage := ci.(*cacheItem).val.(*dynamic.Message)
-		fmt.Println(fullMessage)
-		fmt.Println(data)
 		changeDesc := mergeAndDiffMessage(fullMessage, data)
 		ci.(*cacheItem).c.Add(strconv.FormatInt(version, 10), changeDesc, 0)
 		ci.(*cacheItem).versions.Add(version)
