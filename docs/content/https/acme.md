@@ -23,6 +23,25 @@ Certificates are requested for domain names retrieved from the router's [dynamic
 
 You can read more about this retrieval mechanism in the following section: [ACME Domain Definition](#domain-definition).
 
+!!! important "Defining a certificates resolver does not result in all routers automatically using it. Each router that is supposed to use the resolver must [reference](../routing/routers/index.md#certresolver) it."
+
+??? note "Configuration Reference"
+    
+    There are many available options for ACME.
+    For a quick glance at what's possible, browse the configuration reference:
+    
+    ```toml tab="File (TOML)"
+    --8<-- "content/https/ref-acme.toml"
+    ```
+    
+    ```yaml tab="File (YAML)"
+    --8<-- "content/https/ref-acme.yaml"
+    ```
+    
+    ```bash tab="CLI"
+    --8<-- "content/https/ref-acme.txt"
+    ```
+
 ## Domain Definition
 
 Certificate resolvers request certificates for a set of the domain names 
@@ -56,13 +75,13 @@ Please check the [configuration examples below](#configuration-examples) for mor
       [entryPoints.web]
         address = ":80"
     
-      [entryPoints.web-secure]
+      [entryPoints.websecure]
         address = ":443"
     
-    [certificatesResolvers.le.acme]
-      email = "your-email@your-domain.org"
+    [certificatesResolvers.myresolver.acme]
+      email = "your-email@example.com"
       storage = "acme.json"
-      [certificatesResolvers.le.acme.httpChallenge]
+      [certificatesResolvers.myresolver.acme.httpChallenge]
         # used during the challenge
         entryPoint = "web"
     ```
@@ -72,13 +91,13 @@ Please check the [configuration examples below](#configuration-examples) for mor
       web:
         address: ":80"
     
-      web-secure:
+      websecure:
         address: ":443"
     
     certificatesResolvers:
-      sample:
+      myresolver:
         acme:
-          email: your-email@your-domain.org
+          email: your-email@example.com
           storage: acme.json
           httpChallenge:
             # used during the challenge
@@ -89,47 +108,30 @@ Please check the [configuration examples below](#configuration-examples) for mor
     --entryPoints.web.address=:80
     --entryPoints.websecure.address=:443
     # ...
-    --certificatesResolvers.le.acme.email=your-email@your-domain.org
-    --certificatesResolvers.le.acme.storage=acme.json
+    --certificatesResolvers.myresolver.acme.email=your-email@example.com
+    --certificatesResolvers.myresolver.acme.storage=acme.json
     # used during the challenge
-    --certificatesResolvers.le.acme.httpChallenge.entryPoint=web
+    --certificatesResolvers.myresolver.acme.httpChallenge.entryPoint=web
     ```
 
 !!! important "Defining a certificates resolver does not result in all routers automatically using it. Each router that is supposed to use the resolver must [reference](../routing/routers/index.md#certresolver) it."
 
-??? note "Configuration Reference"
-    
-    There are many available options for ACME.
-    For a quick glance at what's possible, browse the configuration reference:
-    
-    ```toml tab="File (TOML)"
-    --8<-- "content/https/ref-acme.toml"
-    ```
-    
-    ```yaml tab="File (YAML)"
-    --8<-- "content/https/ref-acme.yaml"
-    ```
-    
-    ```bash tab="CLI"
-    --8<-- "content/https/ref-acme.txt"
-    ```
-
 ??? example "Single Domain from Router's Rule Example"
     
-    * A certificate for the domain `company.com` is requested:
+    * A certificate for the domain `example.com` is requested:
 
     --8<-- "content/https/include-acme-single-domain-example.md"
 
 ??? example "Multiple Domains from Router's Rule Example"
  
-    * A certificate for the domains `company.com` (main) and `blog.company.org`
+    * A certificate for the domains `example.com` (main) and `blog.example.org`
       is requested:
     
     --8<-- "content/https/include-acme-multiple-domains-from-rule-example.md"
     
 ??? example "Multiple Domains from Router's `tls.domain` Example"
 
-    * A certificate for the domains `company.com` (main) and `*.company.org` (SAN)
+    * A certificate for the domains `example.com` (main) and `*.example.org` (SAN)
       is requested:
       
     --8<-- "content/https/include-acme-multiple-domains-example.md"
@@ -164,14 +166,14 @@ when using the `TLS-ALPN-01` challenge, Traefik must be reachable by Let's Encry
 ??? example "Configuring the `tlsChallenge`"
 
     ```toml tab="File (TOML)"
-    [certificatesResolvers.le.acme]
+    [certificatesResolvers.myresolver.acme]
       # ...
-      [certificatesResolvers.le.acme.tlsChallenge]
+      [certificatesResolvers.myresolver.acme.tlsChallenge]
     ```
 
     ```yaml tab="File (YAML)"
     certificatesResolvers:
-      sample:
+      myresolver:
         acme:
           # ...
           tlsChallenge: {}
@@ -179,7 +181,7 @@ when using the `TLS-ALPN-01` challenge, Traefik must be reachable by Let's Encry
     
     ```bash tab="CLI"
     # ...
-    --certificatesResolvers.le.acme.tlsChallenge=true
+    --certificatesResolvers.myresolver.acme.tlsChallenge=true
     ```
 
 ### `httpChallenge`
@@ -187,21 +189,21 @@ when using the `TLS-ALPN-01` challenge, Traefik must be reachable by Let's Encry
 Use the `HTTP-01` challenge to generate and renew ACME certificates by provisioning an HTTP resource under a well-known URI.
 
 As described on the Let's Encrypt [community forum](https://community.letsencrypt.org/t/support-for-ports-other-than-80-and-443/3419/72),
-when using the `HTTP-01` challenge, `certificatesResolvers.le.acme.httpChallenge.entryPoint` must be reachable by Let's Encrypt through port 80.
+when using the `HTTP-01` challenge, `certificatesResolvers.myresolver.acme.httpChallenge.entryPoint` must be reachable by Let's Encrypt through port 80.
 
-??? example "Using an EntryPoint Called http for the `httpChallenge`"
+??? example "Using an EntryPoint Called web for the `httpChallenge`"
 
     ```toml tab="File (TOML)"
     [entryPoints]
       [entryPoints.web]
         address = ":80"
       
-      [entryPoints.web-secure]
+      [entryPoints.websecure]
         address = ":443"
     
-    [certificatesResolvers.le.acme]
+    [certificatesResolvers.myresolver.acme]
       # ...
-      [certificatesResolvers.le.acme.httpChallenge]
+      [certificatesResolvers.myresolver.acme.httpChallenge]
         entryPoint = "web"
     ```
 
@@ -210,11 +212,11 @@ when using the `HTTP-01` challenge, `certificatesResolvers.le.acme.httpChallenge
       web:
         address: ":80"
     
-      web-secure:
+      websecure:
         address: ":443"
     
     certificatesResolvers:
-      sample:
+      myresolver:
         acme:
           # ...
           httpChallenge:
@@ -225,7 +227,7 @@ when using the `HTTP-01` challenge, `certificatesResolvers.le.acme.httpChallenge
     --entryPoints.web.address=:80
     --entryPoints.websecure.address=:443
     # ...
-    --certificatesResolvers.le.acme.httpChallenge.entryPoint=web
+    --certificatesResolvers.myresolver.acme.httpChallenge.entryPoint=web
     ```
 
 !!! info ""
@@ -238,9 +240,9 @@ Use the `DNS-01` challenge to generate and renew ACME certificates by provisioni
 ??? example "Configuring a `dnsChallenge` with the DigitalOcean Provider"
 
     ```toml tab="File (TOML)"
-    [certificatesResolvers.le.acme]
+    [certificatesResolvers.myresolver.acme]
       # ...
-      [certificatesResolvers.le.acme.dnsChallenge]
+      [certificatesResolvers.myresolver.acme.dnsChallenge]
         provider = "digitalocean"
         delayBeforeCheck = 0
     # ...
@@ -248,7 +250,7 @@ Use the `DNS-01` challenge to generate and renew ACME certificates by provisioni
     
     ```yaml tab="File (YAML)"
     certificatesResolvers:
-      sample:
+      myresolver:
         acme:
           # ...
           dnsChallenge:
@@ -259,8 +261,8 @@ Use the `DNS-01` challenge to generate and renew ACME certificates by provisioni
     
     ```bash tab="CLI"
     # ...
-    --certificatesResolvers.le.acme.dnsChallenge.provider=digitalocean
-    --certificatesResolvers.le.acme.dnsChallenge.delayBeforeCheck=0
+    --certificatesResolvers.myresolver.acme.dnsChallenge.provider=digitalocean
+    --certificatesResolvers.myresolver.acme.dnsChallenge.delayBeforeCheck=0
     # ...
     ```
 
@@ -285,10 +287,12 @@ For example, `CF_API_EMAIL_FILE=/run/secrets/traefik_cf-api-email` could be used
 | [Azure](https://azure.microsoft.com/services/dns/)          | `azure`        | `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID`, `AZURE_RESOURCE_GROUP`, `[AZURE_METADATA_ENDPOINT]`   | [Additional configuration](https://go-acme.github.io/lego/dns/azure)        |
 | [Bindman](https://github.com/labbsr0x/bindman-dns-webhook)  | `bindman`      | `BINDMAN_MANAGER_ADDRESS`                                                                                                                   | [Additional configuration](https://go-acme.github.io/lego/dns/bindman)      |
 | [Blue Cat](https://www.bluecatnetworks.com/)                | `bluecat`      | `BLUECAT_SERVER_URL`, `BLUECAT_USER_NAME`, `BLUECAT_PASSWORD`, `BLUECAT_CONFIG_NAME`, `BLUECAT_DNS_VIEW`                                    | [Additional configuration](https://go-acme.github.io/lego/dns/bluecat)      |
+| [Checkdomain](https://www.checkdomain.de/)                  | `checkdomain`  | `CHECKDOMAIN_TOKEN`,                                                                                                                        | [Additional configuration](https://go-acme.github.io/lego/dns/checkdomain/) |
 | [ClouDNS](https://www.cloudns.net/)                         | `cloudns`      | `CLOUDNS_AUTH_ID`, `CLOUDNS_AUTH_PASSWORD`                                                                                                  | [Additional configuration](https://go-acme.github.io/lego/dns/cloudns)      |
-| [Cloudflare](https://www.cloudflare.com)                    | `cloudflare`   | `CF_API_EMAIL`, `CF_API_KEY` [^5] or `CF_DNS_API_TOKEN`, `[CF_ZONE_API_TOKEN]`                                                               | [Additional configuration](https://go-acme.github.io/lego/dns/cloudflare)   |
+| [Cloudflare](https://www.cloudflare.com)                    | `cloudflare`   | `CF_API_EMAIL`, `CF_API_KEY` [^5] or `CF_DNS_API_TOKEN`, `[CF_ZONE_API_TOKEN]`                                                              | [Additional configuration](https://go-acme.github.io/lego/dns/cloudflare)   |
 | [CloudXNS](https://www.cloudxns.net)                        | `cloudxns`     | `CLOUDXNS_API_KEY`, `CLOUDXNS_SECRET_KEY`                                                                                                   | [Additional configuration](https://go-acme.github.io/lego/dns/cloudxns)     |
 | [ConoHa](https://www.conoha.jp)                             | `conoha`       | `CONOHA_TENANT_ID`, `CONOHA_API_USERNAME`, `CONOHA_API_PASSWORD`                                                                            | [Additional configuration](https://go-acme.github.io/lego/dns/conoha)       |
+| [Constellix](https://constellix.com)                        | `constellix`   | `CONSTELLIX_API_KEY`, `CONSTELLIX_SECRET_KEY`                                                                                               | [Additional configuration](https://go-acme.github.io/lego/dns/constellix)   |
 | [DigitalOcean](https://www.digitalocean.com)                | `digitalocean` | `DO_AUTH_TOKEN`                                                                                                                             | [Additional configuration](https://go-acme.github.io/lego/dns/digitalocean) |
 | [DNSimple](https://dnsimple.com)                            | `dnsimple`     | `DNSIMPLE_OAUTH_TOKEN`, `DNSIMPLE_BASE_URL`                                                                                                 | [Additional configuration](https://go-acme.github.io/lego/dns/dnsimple)     |
 | [DNS Made Easy](https://dnsmadeeasy.com)                    | `dnsmadeeasy`  | `DNSMADEEASY_API_KEY`, `DNSMADEEASY_API_SECRET`, `DNSMADEEASY_SANDBOX`                                                                      | [Additional configuration](https://go-acme.github.io/lego/dns/dnsmadeeasy)  |
@@ -297,6 +301,7 @@ For example, `CF_API_EMAIL_FILE=/run/secrets/traefik_cf-api-email` could be used
 | [DreamHost](https://www.dreamhost.com/)                     | `dreamhost`    | `DREAMHOST_API_KEY`                                                                                                                         | [Additional configuration](https://go-acme.github.io/lego/dns/dreamhost)    |
 | [Duck DNS](https://www.duckdns.org/)                        | `duckdns`      | `DUCKDNS_TOKEN`                                                                                                                             | [Additional configuration](https://go-acme.github.io/lego/dns/duckdns)      |
 | [Dyn](https://dyn.com)                                      | `dyn`          | `DYN_CUSTOMER_NAME`, `DYN_USER_NAME`, `DYN_PASSWORD`                                                                                        | [Additional configuration](https://go-acme.github.io/lego/dns/dyn)          |
+| [Dynu](https://www.dynu.com)                                | `dynu`         | `DYNU_API_KEY`                                                                                                                              | [Additional configuration](https://go-acme.github.io/lego/dns/dynu)         |
 | [EasyDNS](https://easydns.com/)                             | `easydns`      | `EASYDNS_TOKEN`, `EASYDNS_KEY`                                                                                                              | [Additional configuration](https://go-acme.github.io/lego/dns/easydns)      |
 | External Program                                            | `exec`         | `EXEC_PATH`                                                                                                                                 | [Additional configuration](https://go-acme.github.io/lego/dns/exec)         |
 | [Exoscale](https://www.exoscale.com)                        | `exoscale`     | `EXOSCALE_API_KEY`, `EXOSCALE_API_SECRET`, `EXOSCALE_ENDPOINT`                                                                              | [Additional configuration](https://go-acme.github.io/lego/dns/exoscale)     |
@@ -315,7 +320,7 @@ For example, `CF_API_EMAIL_FILE=/run/secrets/traefik_cf-api-email` could be used
 | [Linode](https://www.linode.com)                            | `linode`       | `LINODE_API_KEY`                                                                                                                            | [Additional configuration](https://go-acme.github.io/lego/dns/linode)       |
 | [Linode v4](https://www.linode.com)                         | `linodev4`     | `LINODE_TOKEN`                                                                                                                              | [Additional configuration](https://go-acme.github.io/lego/dns/linodev4)     |
 | [Liquid Web](https://www.liquidweb.com/)                    | `liquidweb`    | `LIQUID_WEB_PASSWORD`, `LIQUID_WEB_USERNAME`, `LIQUID_WEB_ZONE`                                                                             | [Additional configuration](https://go-acme.github.io/lego/dns/liquidweb)    |
-| manual                                                      | -              | none, but you need to run Traefik interactively [^4], turn on debug log to see instructions and press <kbd>Enter</kbd>.                     |                                                                             |
+| manual                                                      | `manual`       | none, but you need to run Traefik interactively [^4], turn on debug log to see instructions and press <kbd>Enter</kbd>.                     |                                                                             |
 | [MyDNS.jp](https://www.mydns.jp/)                           | `mydnsjp`      | `MYDNSJP_MASTER_ID`, `MYDNSJP_PASSWORD`                                                                                                     | [Additional configuration](https://go-acme.github.io/lego/dns/mydnsjp)      |
 | [Namecheap](https://www.namecheap.com)                      | `namecheap`    | `NAMECHEAP_API_USER`, `NAMECHEAP_API_KEY`                                                                                                   | [Additional configuration](https://go-acme.github.io/lego/dns/namecheap)    |
 | [name.com](https://www.name.com/)                           | `namedotcom`   | `NAMECOM_USERNAME`, `NAMECOM_API_TOKEN`, `NAMECOM_SERVER`                                                                                   | [Additional configuration](https://go-acme.github.io/lego/dns/namedotcom)   |
@@ -329,10 +334,14 @@ For example, `CF_API_EMAIL_FILE=/run/secrets/traefik_cf-api-email` could be used
 | [Oracle Cloud](https://cloud.oracle.com/home)               | `oraclecloud`  | `OCI_COMPARTMENT_OCID`, `OCI_PRIVKEY_FILE`, `OCI_PRIVKEY_PASS`, `OCI_PUBKEY_FINGERPRINT`, `OCI_REGION`, `OCI_TENANCY_OCID`, `OCI_USER_OCID` | [Additional configuration](https://go-acme.github.io/lego/dns/oraclecloud)  |
 | [PowerDNS](https://www.powerdns.com)                        | `pdns`         | `PDNS_API_KEY`, `PDNS_API_URL`                                                                                                              | [Additional configuration](https://go-acme.github.io/lego/dns/pdns)         |
 | [Rackspace](https://www.rackspace.com/cloud/dns)            | `rackspace`    | `RACKSPACE_USER`, `RACKSPACE_API_KEY`                                                                                                       | [Additional configuration](https://go-acme.github.io/lego/dns/rackspace)    |
+| [reg.ru](https://www.reg.ru)                                | `regru`        | `REGRU_USERNAME`, `REGRU_PASSWORD`                                                                                                          | [Additional configuration](https://go-acme.github.io/lego/dns/regru)        |
 | [RFC2136](https://tools.ietf.org/html/rfc2136)              | `rfc2136`      | `RFC2136_TSIG_KEY`, `RFC2136_TSIG_SECRET`, `RFC2136_TSIG_ALGORITHM`, `RFC2136_NAMESERVER`                                                   | [Additional configuration](https://go-acme.github.io/lego/dns/rfc2136)      |
 | [Route 53](https://aws.amazon.com/route53/)                 | `route53`      | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `[AWS_REGION]`, `[AWS_HOSTED_ZONE_ID]` or a configured user/instance IAM profile.             | [Additional configuration](https://go-acme.github.io/lego/dns/route53)      |
+| [RimuHosting](https://rimuhosting.com)                      | `rimuhosting`  | `RIMUHOSTING_API_KEY`                                                                                                                       | [Additional configuration](https://go-acme.github.io/lego/dns/rimuhosting)  |
 | [Sakura Cloud](https://cloud.sakura.ad.jp/)                 | `sakuracloud`  | `SAKURACLOUD_ACCESS_TOKEN`, `SAKURACLOUD_ACCESS_TOKEN_SECRET`                                                                               | [Additional configuration](https://go-acme.github.io/lego/dns/sakuracloud)  |
+| [Scaleway](https://www.scaleway.com)                        | `scaleway`     | `SCALEWAY_API_TOKEN`                                                                                                                        | [Additional configuration](https://go-acme.github.io/lego/dns/scaleway)     |
 | [Selectel](https://selectel.ru/en/)                         | `selectel`     | `SELECTEL_API_TOKEN`                                                                                                                        | [Additional configuration](https://go-acme.github.io/lego/dns/selectel)     |
+| [Servercow](https://servercow.de)                           | `servercow`    | `SERVERCOW_USERNAME`, `SERVERCOW_PASSWORD`                                                                                                  | [Additional configuration](https://go-acme.github.io/lego/dns/servercow)    |
 | [Stackpath](https://www.stackpath.com/)                     | `stackpath`    | `STACKPATH_CLIENT_ID`, `STACKPATH_CLIENT_SECRET`, `STACKPATH_STACK_ID`                                                                      | [Additional configuration](https://go-acme.github.io/lego/dns/stackpath)    |
 | [TransIP](https://www.transip.nl/)                          | `transip`      | `TRANSIP_ACCOUNT_NAME`, `TRANSIP_PRIVATE_KEY_PATH`                                                                                          | [Additional configuration](https://go-acme.github.io/lego/dns/transip)      |
 | [VegaDNS](https://github.com/shupp/VegaDNS-API)             | `vegadns`      | `SECRET_VEGADNS_KEY`, `SECRET_VEGADNS_SECRET`, `VEGADNS_URL`                                                                                | [Additional configuration](https://go-acme.github.io/lego/dns/vegadns)      |
@@ -340,6 +349,7 @@ For example, `CF_API_EMAIL_FILE=/run/secrets/traefik_cf-api-email` could be used
 | [Vscale](https://vscale.io/)                                | `vscale`       | `VSCALE_API_TOKEN`                                                                                                                          | [Additional configuration](https://go-acme.github.io/lego/dns/vscale)       |
 | [VULTR](https://www.vultr.com)                              | `vultr`        | `VULTR_API_KEY`                                                                                                                             | [Additional configuration](https://go-acme.github.io/lego/dns/vultr)        |
 | [Zone.ee](https://www.zone.ee)                              | `zoneee`       | `ZONEEE_API_USER`, `ZONEEE_API_KEY`                                                                                                         | [Additional configuration](https://go-acme.github.io/lego/dns/zoneee)       |
+| [Zonomi](https://zonomi.com)                                | `zonomi`       | `ZONOMI_API_KEY`                                                                                                                            | [Additional configuration](https://go-acme.github.io/lego/dns/zonomi)       |
 
 [^1]: more information about the HTTP message format can be found [here](https://go-acme.github.io/lego/dns/httpreq/)
 [^2]: [providing_credentials_to_your_application](https://cloud.google.com/docs/authentication/production#providing_credentials_to_your_application)
@@ -357,16 +367,16 @@ For example, `CF_API_EMAIL_FILE=/run/secrets/traefik_cf-api-email` could be used
 Use custom DNS servers to resolve the FQDN authority.
 
 ```toml tab="File (TOML)"
-[certificatesResolvers.le.acme]
+[certificatesResolvers.myresolver.acme]
   # ...
-  [certificatesResolvers.le.acme.dnsChallenge]
+  [certificatesResolvers.myresolver.acme.dnsChallenge]
     # ...
     resolvers = ["1.1.1.1:53", "8.8.8.8:53"]
 ```
 
 ```yaml tab="File (YAML)"
 certificatesResolvers:
-  sample:
+  myresolver:
     acme:
       # ...
       dnsChallenge:
@@ -378,7 +388,7 @@ certificatesResolvers:
 
 ```bash tab="CLI"
 # ...
---certificatesResolvers.le.acme.dnsChallenge.resolvers:=1.1.1.1:53,8.8.8.8:53
+--certificatesResolvers.myresolver.acme.dnsChallenge.resolvers=1.1.1.1:53,8.8.8.8:53
 ```
 
 #### Wildcard Domains
@@ -390,10 +400,17 @@ As described in [Let's Encrypt's post](https://community.letsencrypt.org/t/stagi
 
 ### `caServer`
 
+_Required, Default="https://acme-v02.api.letsencrypt.org/directory"_
+
+The CA server to use:
+
+- Let's Encrypt production server: https://acme-v02.api.letsencrypt.org/directory
+- Let's Encrypt staging server: https://acme-staging-v02.api.letsencrypt.org/directory
+
 ??? example "Using the Let's Encrypt staging server"
 
     ```toml tab="File (TOML)"
-    [certificatesResolvers.le.acme]
+    [certificatesResolvers.myresolver.acme]
       # ...
       caServer = "https://acme-staging-v02.api.letsencrypt.org/directory"
       # ...
@@ -401,7 +418,7 @@ As described in [Let's Encrypt's post](https://community.letsencrypt.org/t/stagi
     
     ```yaml tab="File (YAML)"
     certificatesResolvers:
-      sample:
+      myresolver:
         acme:
           # ...
           caServer: https://acme-staging-v02.api.letsencrypt.org/directory
@@ -410,16 +427,18 @@ As described in [Let's Encrypt's post](https://community.letsencrypt.org/t/stagi
 
     ```bash tab="CLI"
     # ...
-    --certificatesResolvers.le.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
+    --certificatesResolvers.myresolver.acme.caServer=https://acme-staging-v02.api.letsencrypt.org/directory
     # ...
     ```
 
 ### `storage`
 
+_Required, Default="acme.json"_
+
 The `storage` option sets the location where your ACME certificates are saved to.
 
 ```toml tab="File (TOML)"
-[certificatesResolvers.le.acme]
+[certificatesResolvers.myresolver.acme]
   # ...
   storage = "acme.json"
   # ...
@@ -427,7 +446,7 @@ The `storage` option sets the location where your ACME certificates are saved to
 
 ```yaml tab="File (YAML)"
 certificatesResolvers:
-  sample:
+  myresolver:
     acme:
       # ...
       storage: acme.json
@@ -436,17 +455,11 @@ certificatesResolvers:
 
 ```bash tab="CLI"
 # ...
---certificatesResolvers.le.acme.storage=acme.json
+--certificatesResolvers.myresolver.acme.storage=acme.json
 # ...
 ```
 
-The value can refer to some kinds of storage:
-
-- a JSON file
-
-#### In a File
-
-ACME certificates can be stored in a JSON file that needs to have a `600` file mode .
+ACME certificates are stored in a JSON file that needs to have a `600` file mode.
 
 In Docker you can mount either the JSON file, or the folder containing it:
 

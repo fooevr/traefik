@@ -52,16 +52,22 @@ func buildProxy(passHostHeader *bool, responseForwarding *dynamic.ResponseForwar
 			outReq.ProtoMajor = 1
 			outReq.ProtoMinor = 1
 
+			if _, ok := outReq.Header["User-Agent"]; !ok {
+				outReq.Header.Set("User-Agent", "")
+			}
+
 			// Do not pass client Host header unless optsetter PassHostHeader is set.
 			if passHostHeader != nil && !*passHostHeader {
 				outReq.Host = outReq.URL.Host
 			}
 
 			// Even if the websocket RFC says that headers should be case-insensitive,
-			// some servers need Sec-WebSocket-Key to be case-sensitive.
+			// some servers need Sec-WebSocket-Key and Sec-WebSocket-Protocol to be case-sensitive.
 			// https://tools.ietf.org/html/rfc6455#page-20
 			outReq.Header["Sec-WebSocket-Key"] = outReq.Header["Sec-Websocket-Key"]
+			outReq.Header["Sec-WebSocket-Protocol"] = outReq.Header["Sec-Websocket-Protocol"]
 			delete(outReq.Header, "Sec-Websocket-Key")
+			delete(outReq.Header, "Sec-Websocket-Protocol")
 		},
 		Transport:      defaultRoundTripper,
 		FlushInterval:  time.Duration(flushInterval),
