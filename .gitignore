@@ -16,3 +16,8 @@
 *.exe
 cover.out
 vendor/
+cmd/traefik/traefik_darwin_amd64.zip
+cmd/traefik/traefik_linux_amd64.zip
+cmd/traefik/traefik_windows_amd64.zip
+cmd/traefik/traefik_darwin_amd64/traefik
+cmd/traefik/traefik_linux_amd64/traefik
