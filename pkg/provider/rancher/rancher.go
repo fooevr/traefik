@@ -6,7 +6,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/cenkalti/backoff/v3"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/containous/traefik/v2/pkg/config/dynamic"
 	"github.com/containous/traefik/v2/pkg/job"
 	"github.com/containous/traefik/v2/pkg/log"
@@ -151,7 +151,7 @@ func (p *Provider) Provide(configurationChan chan<- dynamic.Message, pool *safe.
 }
 
 func (p *Provider) intervalPoll(ctx context.Context, client rancher.Client, updateConfiguration func(string)) {
-	ticker := time.NewTicker(time.Second * time.Duration(p.RefreshSeconds))
+	ticker := time.NewTicker(time.Duration(p.RefreshSeconds) * time.Second)
 	defer ticker.Stop()
 
 	var version string
