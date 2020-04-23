@@ -2,6 +2,7 @@ package grpchandle
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"crypto/md5"
 	"encoding/base64"
@@ -25,8 +26,10 @@ import (
 	gca "github.com/patrickmn/go-cache"
 	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,8 +49,9 @@ type grpcHandle struct {
 	rpcs            map[string]*desc.MethodDescriptor
 	cache           bool
 	ttl             time.Duration
-	incremental     bool
 	maxVersionCount int
+	incrRegex       *regexp.Regexp
+	fullRegex       *regexp.Regexp
 	lockers         *gca.Cache
 }
 
@@ -55,16 +59,25 @@ type grpcHandle struct {
 func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, name string) (http.Handler, error) {
 	logger := log.FromContext(middlewares.GetLoggerCtx(ctx, name, typeName))
 	logger.Debug("Creating middleware")
+	incrReg, err := regexp.Compile(config.IncrRegex)
+	if err != nil {
+		logger.Fatal("parse regex `" + config.IncrRegex + "` faield. " + err.Error())
+	}
+	fullReg, err := regexp.Compile(config.FullRegex)
+	if err != nil {
+		logger.Fatal("parse regex `" + config.FullRegex + "` faield. " + err.Error())
+	}
 	result := &grpcHandle{
-		next:        next,
-		name:        name,
-		grpc:        grpc.NewServer(grpc.UnknownServiceHandler(handle)),
-		messages:    map[string]*desc.MessageDescriptor{},
-		rpcs:        map[string]*desc.MethodDescriptor{},
-		cache:       config.Cache,
-		ttl:         time.Millisecond * time.Duration(config.TTL),
-		incremental: config.Incremental,
-		lockers:     gca.New(time.Hour*10, time.Minute*10),
+		next:      next,
+		name:      name,
+		grpc:      grpc.NewServer(grpc.UnknownServiceHandler(handle)),
+		messages:  map[string]*desc.MessageDescriptor{},
+		rpcs:      map[string]*desc.MethodDescriptor{},
+		cache:     config.Cache,
+		ttl:       time.Second * time.Duration(config.TTL),
+		incrRegex: incrReg,
+		fullRegex: fullReg,
+		lockers:   gca.New(time.Hour*10, time.Minute*10),
 	}
 	if config.MaxVersionCount == 0 {
 		result.maxVersionCount = 200
@@ -76,9 +89,12 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 
 	fs := new(descriptor.FileDescriptorSet)
 	descBytes, _ := base64.StdEncoding.DecodeString(config.Desc)
-	err := fs.XXX_Unmarshal(descBytes)
+	r, _ := zlib.NewReader(bytes.NewReader(descBytes))
+	buf := bytes.NewBuffer([]byte{})
+	io.Copy(buf, r)
+	err = fs.XXX_Unmarshal(buf.Bytes())
 	if err != nil {
-		logger.Error("can't parse desc")
+		logger.Fatal("can't parse desc")
 	}
 	fs.File = append(fs.File, wrapperFs.File...)
 	files, err := desc.CreateFileDescriptorsFromSet(fs)
@@ -91,7 +107,11 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 		}
 		for _, service := range file.GetServices() {
 			for _, method := range service.GetMethods() {
-				result.rpcs[fmt.Sprintf("/%s.%s/%s", file.GetPackage(), service.GetName(), method.GetName())] = method
+				if len(file.GetPackage()) > 0 {
+					result.rpcs[fmt.Sprintf("/%s.%s/%s", file.GetPackage(), service.GetName(), method.GetName())] = method
+				} else {
+					result.rpcs[fmt.Sprintf("/%s/%s", service.GetName(), method.GetName())] = method
+				}
 			}
 		}
 	}
@@ -109,43 +129,41 @@ func (a *grpcHandle) GetTracingInformation() (string, ext.SpanKindEnum) {
 }
 
 func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	// TODO: debug
+	req.Header.Set("ts", "0")
 	logger := log.FromContext(middlewares.GetLoggerCtx(req.Context(), a.name, typeName))
 	if req.ProtoMajor != 2 || !strings.Contains(req.Header.Get("Content-Type"), "application/grpc") {
 		a.next.ServeHTTP(rw, req)
 		return
 	}
-	if !a.cache {
+	isFullCache := a.fullRegex.MatchString(req.RequestURI)
+	isIncrCache := a.incrRegex.MatchString(req.RequestURI)
+	if !a.cache || (!isFullCache && !isIncrCache) {
 		a.next.ServeHTTP(rw, req)
 		return
 	}
 	var clientVersion int64
 	if req.Header.Get("ts") == "" {
-		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("miss ts header"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("miss ts header"))
 		return
 	}
 	if v, err := strconv.ParseInt(req.Header.Get("ts"), 10, 64); err != nil {
-		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("ts header not int64"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("ts header not int64"))
 	} else {
 		clientVersion = v
 	}
 
 	methodDesc := a.rpcs[req.RequestURI]
 	if methodDesc == nil {
-		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 404, errors.New("request URI"+req.RequestURI+" is not found"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 404, errors.New("request URI"+req.RequestURI+" is not found"))
 		return
 	}
 	bts, _ := ioutil.ReadAll(req.Body)
 	if len(bts) < 5 {
-		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 404, errors.New("parse body to gRPC failed"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 404, errors.New("parse body to gRPC failed"))
 		return
 	}
 	frame := bts[5:]
-	msg := dynamicProto.NewMessage(methodDesc.GetInputType())
-	err := msg.Unmarshal(frame)
-	if err != nil {
-		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 400, errors.New("parse body to gRPC failed"))
-		return
-	}
 	cacheIdBuffer := &bytes.Buffer{}
 	cacheIdBuffer.Write([]byte(req.RequestURI))
 	cacheIdBuffer.Write(frame)
@@ -157,42 +175,40 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		locker = &sync.RWMutex{}
 		a.lockers.Add(cacheId, locker, 0)
 	}
-	if readCache(locker.(*sync.RWMutex), a, cacheId, clientVersion, rw) {
+	// 成功命中则写入并终止处理
+	if getCache(locker.(*sync.RWMutex), isIncrCache, cacheId, clientVersion, rw) {
 		//a.next.ServeHTTP(rw, req)
 		return
 	}
-	newRw := &cacheResponse{
-		cacheId: "",
-		buffer:  &bytes.Buffer{},
-		header:  map[string][]string{},
-	}
 
-	writeCache(cacheId, locker.(*sync.RWMutex), bts, req, newRw, methodDesc, a, logger)
-	if !readCache(locker.(*sync.RWMutex), a, cacheId, clientVersion, rw) {
-		writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 500, errors.New("set cache error"))
+	setCache(cacheId, locker.(*sync.RWMutex), bts, req, methodDesc, a, isIncrCache, logger)
+	if !getCache(locker.(*sync.RWMutex), isIncrCache, cacheId, clientVersion, rw) {
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 500, errors.New("set cache error"))
 	} else {
 		//a.next.ServeHTTP(rw, req)
 	}
 }
 
-func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersion int64, rw http.ResponseWriter) bool {
+// 读取缓存内容，return success
+func getCache(locker *sync.RWMutex, isIncr bool, cacheId string, clientVersion int64, rw http.ResponseWriter) bool {
 	locker.RLock()
 	defer locker.RUnlock()
-	if a.incremental {
+	if isIncr {
 		c, ct, change, version, hit := cache.CacheManager.GetVersionCache(cacheId, clientVersion)
 		if hit {
 			cacheBytes, err := c.Marshal()
 			if err != nil {
-				writeResult(rw, nil, cache.ChangeType_Unchange, 0, nil, 500, err)
+				response(rw, nil, cache.ChangeType_Unchange, 0, nil, 500, err)
 				return false
 			}
-			writeResult(rw, cacheBytes, ct, version, change, 200, nil)
+			response(rw, cacheBytes, ct, version, change, 200, nil)
 			return true
 		}
 	} else {
 		cache, hit := cache.CacheManager.GetNoVersionCache(cacheId, time.Now().Unix())
 		if hit {
 			rw.Write(cache)
+			rw.Header().Add("Trailer:Grpc-Status", "0")
 			rw.WriteHeader(200)
 			return true
 		}
@@ -200,7 +216,7 @@ func readCache(locker *sync.RWMutex, a *grpcHandle, cacheId string, clientVersio
 	return false
 }
 
-func writeResult(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, version int64, change *dataservice.ChangeDesc, code int, err error) {
+func response(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, version int64, change *dataservice.ChangeDesc, code int, err error) {
 	buffer := &bytes.Buffer{}
 	buffer.Write([]byte{0})
 	length := make([]byte, 4)
@@ -232,13 +248,18 @@ func writeResult(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, 
 	rw.Write(buffer.Bytes())
 }
 
-func writeCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http.Request, newRw *cacheResponse, methodDesc *desc.MethodDescriptor, a *grpcHandle, logger log.Logger) {
+func setCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http.Request, methodDesc *desc.MethodDescriptor, a *grpcHandle, isIncr bool, logger log.Logger) {
 	locker.Lock()
 	defer locker.Unlock()
 	req.Body = ioutil.NopCloser(bytes.NewReader(reqBytes))
+	newRw := &cacheResponse{
+		cacheId: "",
+		buffer:  &bytes.Buffer{},
+		header:  map[string][]string{},
+	}
 
 	a.next.ServeHTTP(newRw, req)
-	if a.incremental {
+	if isIncr {
 		msg := dynamicProto.NewMessage(methodDesc.GetOutputType())
 		err := msg.Unmarshal(newRw.buffer.Bytes()[5:])
 		if err != nil {
