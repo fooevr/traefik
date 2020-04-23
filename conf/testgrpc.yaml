@@ -13,12 +13,12 @@ http:
     grpc:
       loadBalancer:
         servers:
-          - url: h2c://139.196.183.17:18081
+          - url: h2c://127.0.0.1:8083
 #          - url: http://127.0.0.1:8082
   middlewares:
     grpc1:
       grpcHandler:
-        desc: eJxMj8FKAzEQhs3WCqae9iBSQUJPOWWgLd48qZUigqT6ALvbaVjZ7pRkWvCxfCDfRdKo5Ba+bwL/J78LeQfvAX2ADREePCzXWL16+sCGAzxT794wMATfwLZqe9h5YgLGwOb4HF87ItdhEvV+A7jd8WeSky8hR/H/C4ZQOSyVHK3Yt71btNitr4QS+tzmqLyRctnzbJoOCiX00Gbk19/Okx8ooQc2I9EvOqo4+VMldGEzEhc80L7uMB0MldDC5mh6nyav0B/aBsu5lE/4H3BpUq75yzWPMXd8YbLMyUl9dvSznwAAAP//K+luYA==
+        desc: eJyMlE9v00wQxuU4/7p527ddaDtNCwo95VBsmkJBcAHRVqqACiXANZp618HqxmutN6ly5EPxefgqaHedpqKXvXnn+c0z49FoyO8OeR9/L7kq41RKPlfxmbzNhURWxp9kPvnGSx2XKomnmOVxoaSW8YXIJj/1ZZ7KyAa6TydSTgR38vUsjW8VFgVXZaXv/6vzaaEXTjz80yZk5Ug3SZhmDIJe0F8bmk/aJe2s/KBUNudQ6wX99vDuTbdIPR3nEsIKv5J0mzTTMUPNod4L+uGwkZ6h5jQmdTRkoxf0O4ODyLUULVuKRlpl+eQHihkfhnhlG2G8gKZzZrwwEVQKWi6CSplIqRm0bSHz6SIIa8sI0uck5JoBsXX3H9S9zPXpy6os18zhCB0v3LqjZvCfB47OHTXCuheO9MTMcioZhw2PsTXSL5JxuktaKMaZqfO/HVUTxaVxq4QEJWzeCQnaUScCYcsNNhFI90g7HZca9awEasOtdGSf9B0hjAtcjBPT1yOPvtYs/9H09pq0q+QcHnuktlxqTk9Jq0ztlsK2T14F0wFplBpzBjs+A7QofUHqE7O/ux4plqQRCRNUAD67naAy/LQ4hj0fflocW/+MQdfLP2OWFwz2vXjheI5w4MVzpEekNhfwxAOvzcXhr2B5YT5npaZHpDE3GgS9sN8Z7EQrLbJJ57lWi6GDuueErIJmU2/4YnmdbviCPlu61Ww3nWh1yyqLt7U3weCCrDthxNU8Szh9RTa+zoS4d/l2HvzIuTmT3c69Bq+bVjz5GwAA//9Su7bj
         cache: true
         ttl: 10
         incrRegex: /((?i)pull)[a-zA-Z0-9_]+$
@@ -27,3 +27,14 @@ http:
       headers:
         customRequestHeaders:
           X-Forwarded-Proto: https
+        accessControlAllowMethods:
+          - GET
+          - OPTIONS
+          - PUT
+        accessControlAllowOrigin: "http://127.0.0.1:61041"
+        accessControlMaxAge: 100
+        accessControlAllowHeaders:
+          - x-grpc-web
+          - content-type
+#        accessControlContentType:
+        addVaryHeader: true
