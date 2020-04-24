@@ -130,7 +130,7 @@ func (a *grpcHandle) GetTracingInformation() (string, ext.SpanKindEnum) {
 
 func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// TODO: debug
-	req.Header.Set("ts", "0")
+	//req.Header.Set("ts", "0")
 	logger := log.FromContext(middlewares.GetLoggerCtx(req.Context(), a.name, typeName))
 	if req.ProtoMajor != 2 || !strings.Contains(req.Header.Get("Content-Type"), "application/grpc") {
 		a.next.ServeHTTP(rw, req)

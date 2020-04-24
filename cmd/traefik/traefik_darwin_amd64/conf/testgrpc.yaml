@@ -2,21 +2,39 @@ http:
   routers:
     traefik-dashboard:
       entryPoints:
-        - websecure
-      rule: Host(`grpc.chinaacdm.com`)
+        - web
+      rule: Host(`127.0.0.1`)
       service: grpc
-      tls: {}
+#      tls: {}
       middlewares:
         - grpc1
+        - header
   services:
     grpc:
       loadBalancer:
         servers:
-          - url: h2c://grpc:8080
+          - url: h2c://127.0.0.1:8083
+#          - url: http://127.0.0.1:8082
   middlewares:
     grpc1:
       grpcHandler:
-        desc: CqYMChFUZXN0TWVzc2FnZS5wcm90bxIfY29tLnZhcmlmbGlnaHQuZGF0YXNlcnZpY2UudGVzdBoeZ29vZ2xlL3Byb3RvYnVmL3dyYXBwZXJzLnByb3RvGhtnb29nbGUvcHJvdG9idWYvZW1wdHkucHJvdG8ijQYKB3N0dWRlbnQSDgoCaWQYASABKAVSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWUSEAoDYWdlGAMgASgFUgNhZ2USRgoEdGFncxgEIAMoCzIyLmNvbS52YXJpZmxpZ2h0LmRhdGFzZXJ2aWNlLnRlc3Quc3R1ZGVudC5UYWdzRW50cnlSBHRhZ3MSNgoHY29tbWVudBgFIAEoCzIcLmdvb2dsZS5wcm90b2J1Zi5TdHJpbmdWYWx1ZVIHY29tbWVudBItCgNpdngYBiABKAsyGy5nb29nbGUucHJvdG9idWYuSW50MzJWYWx1ZVIDaXZ4EkkKBXRhZ3MyGAcgAygLMjMuY29tLnZhcmlmbGlnaHQuZGF0YXNlcnZpY2UudGVzdC5zdHVkZW50LlRhZ3MyRW50cnlSBXRhZ3MyEjYKAXMYZCABKAsyKC5jb20udmFyaWZsaWdodC5kYXRhc2VydmljZS50ZXN0LnN0dWRlbnRSAXMSQQoCbXMY6QcgAygLMjAuY29tLnZhcmlmbGlnaHQuZGF0YXNlcnZpY2UudGVzdC5zdHVkZW50Lk1zRW50cnlSAm1zEjkKAnJzGJlOIAMoCzIoLmNvbS52YXJpZmxpZ2h0LmRhdGFzZXJ2aWNlLnRlc3Quc3R1ZGVudFICcnMSKwoCcmkYCiADKAsyGy5nb29nbGUucHJvdG9idWYuSW50NjRWYWx1ZVICcmkaNwoJVGFnc0VudHJ5EhAKA2tleRgBIAEoCVIDa2V5EhQKBXZhbHVlGAIgASgJUgV2YWx1ZToCOAEaVQoKVGFnczJFbnRyeRIQCgNrZXkYASABKAlSA2tleRIxCgV2YWx1ZRgCIAEoCzIbLmdvb2dsZS5wcm90b2J1Zi5JbnQ2NFZhbHVlUgV2YWx1ZToCOAEaXwoHTXNFbnRyeRIQCgNrZXkYASABKAVSA2tleRI+CgV2YWx1ZRgCIAEoCzIoLmNvbS52YXJpZmxpZ2h0LmRhdGFzZXJ2aWNlLnRlc3Quc3R1ZGVudFIFdmFsdWU6AjgBIlwKBGV4YW0SDgoCaWQYASABKAVSAmlkEhAKA2NscxgCIAEoCVIDY2xzEhwKCXN0dWRlbnRpZBgDIAEoBVIJc3R1ZGVudGlkEhQKBXNjb3JlGAQgASgFUgVzY29yZSL3AQoMU3R1ZGVudFNjb3JlEjYKAXMYASABKAsyKC5jb20udmFyaWZsaWdodC5kYXRhc2VydmljZS50ZXN0LnN0dWRlbnRSAXMSTgoFZXhhbXMYAiADKAsyOC5jb20udmFyaWZsaWdodC5kYXRhc2VydmljZS50ZXN0LlN0dWRlbnRTY29yZS5FeGFtc0VudHJ5UgVleGFtcxpfCgpFeGFtc0VudHJ5EhAKA2tleRgBIAEoCVIDa2V5EjsKBXZhbHVlGAIgASgLMiUuY29tLnZhcmlmbGlnaHQuZGF0YXNlcnZpY2UudGVzdC5leGFtUgV2YWx1ZToCOAEi1wEKEFN0dWRlbnRTY29yZXNNYXASWAoHcmVzdWx0cxgBIAMoCzI+LmNvbS52YXJpZmxpZ2h0LmRhdGFzZXJ2aWNlLnRlc3QuU3R1ZGVudFNjb3Jlc01hcC5SZXN1bHRzRW50cnlSB3Jlc3VsdHMaaQoMUmVzdWx0c0VudHJ5EhAKA2tleRgBIAEoBVIDa2V5EkMKBXZhbHVlGAIgASgLMi0uY29tLnZhcmlmbGlnaHQuZGF0YXNlcnZpY2UudGVzdC5TdHVkZW50U2NvcmVSBXZhbHVlOgI4ATJpCgxTY29yZVNlcnZpY2USWQoMR2V0QWxsU2NvcmVzEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GjEuY29tLnZhcmlmbGlnaHQuZGF0YXNlcnZpY2UudGVzdC5TdHVkZW50U2NvcmVzTWFwYgZwcm90bzM=
+        desc: eJyMlE9v00wQxuU4/7p527ddaDtNCwo95VBsmkJBcAHRVqqACiXANZp618HqxmutN6ly5EPxefgqaHedpqKXvXnn+c0z49FoyO8OeR9/L7kq41RKPlfxmbzNhURWxp9kPvnGSx2XKomnmOVxoaSW8YXIJj/1ZZ7KyAa6TydSTgR38vUsjW8VFgVXZaXv/6vzaaEXTjz80yZk5Ug3SZhmDIJe0F8bmk/aJe2s/KBUNudQ6wX99vDuTbdIPR3nEsIKv5J0mzTTMUPNod4L+uGwkZ6h5jQmdTRkoxf0O4ODyLUULVuKRlpl+eQHihkfhnhlG2G8gKZzZrwwEVQKWi6CSplIqRm0bSHz6SIIa8sI0uck5JoBsXX3H9S9zPXpy6os18zhCB0v3LqjZvCfB47OHTXCuheO9MTMcioZhw2PsTXSL5JxuktaKMaZqfO/HVUTxaVxq4QEJWzeCQnaUScCYcsNNhFI90g7HZca9awEasOtdGSf9B0hjAtcjBPT1yOPvtYs/9H09pq0q+QcHnuktlxqTk9Jq0ztlsK2T14F0wFplBpzBjs+A7QofUHqE7O/ux4plqQRCRNUAD67naAy/LQ4hj0fflocW/+MQdfLP2OWFwz2vXjheI5w4MVzpEekNhfwxAOvzcXhr2B5YT5npaZHpDE3GgS9sN8Z7EQrLbJJ57lWi6GDuueErIJmU2/4YnmdbviCPlu61Ww3nWh1yyqLt7U3weCCrDthxNU8Szh9RTa+zoS4d/l2HvzIuTmT3c69Bq+bVjz5GwAA//9Su7bj
         cache: true
-        ttl: 300
-        incremental: true
+        ttl: 10
+        incrRegex: /((?i)pull)[a-zA-Z0-9_]+$
+        fullRegex: /((?i)get)[a-zA-Z0-9_]+$
+    header:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: https
+        accessControlAllowMethods:
+          - GET
+          - OPTIONS
+          - PUT
+        accessControlAllowOrigin: "http://127.0.0.1:61041"
+        accessControlMaxAge: 100
+        accessControlAllowHeaders:
+          - x-grpc-web
+          - content-type
+#        accessControlContentType:
+        addVaryHeader: true

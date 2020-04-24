@@ -3,26 +3,30 @@ http:
     traefik-dashboard:
       entryPoints:
         - web
-      rule: Host(`127.0.0.1`)
+      rule: Host(`192.168.203.244`)
       service: grpc
 #      tls: {}
       middlewares:
-        - grpc1
         - header
+        - grpcweb
+        - grpc1
   services:
     grpc:
       loadBalancer:
         servers:
-          - url: h2c://127.0.0.1:8083
+          - url: h2c://127.0.0.1:8081
 #          - url: http://127.0.0.1:8082
   middlewares:
     grpc1:
       grpcHandler:
-        desc: eJyMlE9v00wQxuU4/7p527ddaDtNCwo95VBsmkJBcAHRVqqACiXANZp618HqxmutN6ly5EPxefgqaHedpqKXvXnn+c0z49FoyO8OeR9/L7kq41RKPlfxmbzNhURWxp9kPvnGSx2XKomnmOVxoaSW8YXIJj/1ZZ7KyAa6TydSTgR38vUsjW8VFgVXZaXv/6vzaaEXTjz80yZk5Ug3SZhmDIJe0F8bmk/aJe2s/KBUNudQ6wX99vDuTbdIPR3nEsIKv5J0mzTTMUPNod4L+uGwkZ6h5jQmdTRkoxf0O4ODyLUULVuKRlpl+eQHihkfhnhlG2G8gKZzZrwwEVQKWi6CSplIqRm0bSHz6SIIa8sI0uck5JoBsXX3H9S9zPXpy6os18zhCB0v3LqjZvCfB47OHTXCuheO9MTMcioZhw2PsTXSL5JxuktaKMaZqfO/HVUTxaVxq4QEJWzeCQnaUScCYcsNNhFI90g7HZca9awEasOtdGSf9B0hjAtcjBPT1yOPvtYs/9H09pq0q+QcHnuktlxqTk9Jq0ztlsK2T14F0wFplBpzBjs+A7QofUHqE7O/ux4plqQRCRNUAD67naAy/LQ4hj0fflocW/+MQdfLP2OWFwz2vXjheI5w4MVzpEekNhfwxAOvzcXhr2B5YT5npaZHpDE3GgS9sN8Z7EQrLbJJ57lWi6GDuueErIJmU2/4YnmdbviCPlu61Ww3nWh1yyqLt7U3weCCrDthxNU8Szh9RTa+zoS4d/l2HvzIuTmT3c69Bq+bVjz5GwAA//9Su7bj
+        desc: eJyMlM1uEzEQx7X57pSW1lDqph+KeiFCsNumUBBcQAWkqFBVCXBCiqZrb7p0s17ZTlCejguPwJ1XQbY3LQIJfLNnfvP/z85aA99X4CT6qLhUUSIEn8mozzieS/GFx1pFpyIff+BKR0rG0QTTPCqk0CJ6m6XjS93PExHaANmLxSScoUwTmwmTlCnNlQ7dvb03FmKccVd+MU2irxKLgkvl6tvbf+b5pNBzl9z/2QK4cSRrUE1SRoNO0F0amCNpQytVr6RMZ5xWOkG3Nbi+k3WoJaNc0GqJnwmyAY1kxFBzWusE3eqgnrxGzUkENTRkvRN0l3s7oWspXLQUDrVM8/EnzKZ8UMUz2wjjBW04ZcYLE0EpadNFUEoTUZrRljUyRxdBurSIIHkEVa4ZBeu7/ZdvP9fHj0tbrpnDkS574VYdNaO3PHB06qiRrnjhSI7MLCeCcbrqMbZ68l4wTjahidkoNT637agamPWNWpmIUdC160SMdtRxhnTdDTbOkGxBKxkpjXqqKLHhZjK0V/ICgPEM56PY9HXHo68ly5+Y3p5CqyzO6V2P0qYrzckxNJV77XTDp66ESQ/qSmPO6D2fAVqUHEBtbN7vpkeJJUkI1RglpT5vO0Zp+ElxSLd8+ElxaPVTRtte+imzfMbothefOZ4j3fHiOZKHUJlldNcDr8yy/V1ongl9meZjQqBmFle5Xux5/1uwWEDvUqXJKdRnppQGnWp3ufck/PfyC29KQ2v5JtdyPnAabQZwEzTv/IrPF7vtis/Jy4VZxX7LAz8zsyhLh+eVZ0HvRwArLjPkcpbGnHBYPZ9m2W979f7/pMsRtT17sLP6DI2hlhwn/vK+4EFw0bB/9OhXAAAA///PVBnm
         cache: true
         ttl: 10
         incrRegex: /((?i)pull)[a-zA-Z0-9_]+$
-        fullRegex: /((?i)get)[a-zA-Z0-9_]+$
+        fullRegex: .*
+    grpcweb:
+      grpcWeb:
+        a: b
     header:
       headers:
         customRequestHeaders:
@@ -31,7 +35,7 @@ http:
           - GET
           - OPTIONS
           - PUT
-        accessControlAllowOrigin: "http://127.0.0.1:61041"
+        accessControlAllowOrigin: "*"
         accessControlMaxAge: 100
         accessControlAllowHeaders:
           - x-grpc-web
