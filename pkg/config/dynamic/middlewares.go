@@ -16,6 +16,7 @@ import (
 
 // Middleware holds the Middleware configuration.
 type Middleware struct {
+	GRPCWeb           *GRPCWeb           `json:"grpcWeb,omitempty" toml:"grpcWeb,omitempty" yaml:"grpcWeb,omitempty"`
 	GRPCHandler       *GRPCHandler       `json:"grpcHandler,omitempty" toml:"grpcHandler,omitempty" yaml:"grpcHandler,omitempty"`
 	AddPrefix         *AddPrefix         `json:"addPrefix,omitempty" toml:"addPrefix,omitempty" yaml:"addPrefix,omitempty"`
 	StripPrefix       *StripPrefix       `json:"stripPrefix,omitempty" toml:"stripPrefix,omitempty" yaml:"stripPrefix,omitempty"`
@@ -353,6 +354,9 @@ type GRPCHandler struct {
 	MaxVersionCount int    `json:"maxversioncount,omitempty" toml:"maxversioncount,omitempty" yaml:"maxversioncount,omitempty" export:"true"`
 	IncrRegex       string `json:"incrRegex,omitempty" toml:"incrRegex,omitempty" yaml:"incrRegex,omitempty" export:"true"`
 	FullRegex       string `json:"fullRegex,omitempty" toml:"fullRegex,omitempty" yaml:"fullRegex,omitempty" export:"true"`
+}
+
+type GRPCWeb struct {
 }
 
 // +k8s:deepcopy-gen=true
