@@ -13,7 +13,7 @@ http:
     grpc:
       loadBalancer:
         servers:
-          - url: h2c://127.0.0.1:8083
+          - url: h2c://127.0.0.1:8081
 #          - url: http://127.0.0.1:8082
   middlewares:
     grpc1:
@@ -26,15 +26,16 @@ http:
     header:
       headers:
         customRequestHeaders:
-          X-Forwarded-Proto: https
+#          X-Forwarded-Proto: https
         accessControlAllowMethods:
           - GET
           - OPTIONS
           - PUT
+          - POST
         accessControlAllowOrigin: "http://127.0.0.1:61041"
-        accessControlMaxAge: 100
-        accessControlAllowHeaders:
-          - x-grpc-web
-          - content-type
+#        accessControlMaxAge: 100
+#        accessControlAllowHeaders:
+#          - x-grpc-web
+#          - content-type
 #        accessControlContentType:
-        addVaryHeader: true
+#        addVaryHeader: true

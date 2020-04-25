@@ -20,12 +20,15 @@ import (
 	"github.com/containous/traefik/v2/pkg/tracing"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jhump/protoreflect/desc"
 	dynamicProto "github.com/jhump/protoreflect/dynamic"
+	"github.com/mwitkow/grpc-proxy/proxy"
 	"github.com/opentracing/opentracing-go/ext"
 	gca "github.com/patrickmn/go-cache"
 	_ "github.com/vulcand/oxy/buffer"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -41,10 +44,11 @@ const (
 )
 
 type grpcHandle struct {
-	next     http.Handler
-	name     string
-	grpc     *grpc.Server
-	messages map[string]*desc.MessageDescriptor
+	next             http.Handler
+	name             string
+	grpc             *grpc.Server
+	websocketWrapper *grpcweb.WrappedGrpcServer
+	messages         map[string]*desc.MessageDescriptor
 
 	rpcs            map[string]*desc.MethodDescriptor
 	cache           bool
@@ -67,10 +71,36 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 	if err != nil {
 		logger.Fatal("parse regex `" + config.FullRegex + "` faield. " + err.Error())
 	}
+	// TODO: 配置后端地址
+	backend, err := grpc.Dial("127.0.0.1:8081", grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	if err != nil {
+		logger.Error(err)
+	}
+	director := func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
+		md, _ := metadata.FromIncomingContext(ctx)
+		outCtx, _ := context.WithCancel(ctx)
+		mdCopy := md.Copy()
+		delete(mdCopy, "user-agent")
+		// If this header is present in the request from the web client,
+		// the actual connection to the backend will not be established.
+		// https://github.com/improbable-eng/grpc-web/issues/568
+		delete(mdCopy, "connection")
+		outCtx = metadata.NewOutgoingContext(outCtx, mdCopy)
+		return outCtx, backend, nil
+	}
+	gserver := grpc.NewServer(grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
+		grpc.CustomCodec(proxy.Codec()),
+		grpc.MaxRecvMsgSize(1024*1024*1024),
+	)
 	result := &grpcHandle{
-		next:      next,
-		name:      name,
-		grpc:      grpc.NewServer(grpc.UnknownServiceHandler(handle)),
+		next: next,
+		name: name,
+		grpc: gserver,
+		websocketWrapper: grpcweb.WrapServer(gserver, grpcweb.WithWebsockets(true), grpcweb.WithCorsForRegisteredEndpointsOnly(false), grpcweb.WithOriginFunc(func(origin string) bool {
+			return true
+		}), grpcweb.WithWebsocketOriginFunc(func(req *http.Request) bool {
+			return true
+		}), grpcweb.WithWebsocketPingInterval(time.Second*5), grpcweb.WithAllowedRequestHeaders([]string{"*"})),
 		messages:  map[string]*desc.MessageDescriptor{},
 		rpcs:      map[string]*desc.MethodDescriptor{},
 		cache:     config.Cache,
@@ -130,8 +160,12 @@ func (a *grpcHandle) GetTracingInformation() (string, ext.SpanKindEnum) {
 
 func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	// TODO: debug
-	req.Header.Set("ts", "0")
 	logger := log.FromContext(middlewares.GetLoggerCtx(req.Context(), a.name, typeName))
+	if a.websocketWrapper.IsGrpcWebSocketRequest(req) {
+		a.websocketWrapper.HandleGrpcWebsocketRequest(rw, req)
+		//a.next.ServeHTTP(rw, req)
+		return
+	}
 	if req.ProtoMajor != 2 || !strings.Contains(req.Header.Get("Content-Type"), "application/grpc") {
 		a.next.ServeHTTP(rw, req)
 		return
