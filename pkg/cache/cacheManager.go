@@ -234,15 +234,15 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
-					result.MapBoolRemoved[k] = nil
+					result.MapBoolRemoved[k] = &dataservice.ChangeDesc{}
 				} else {
-					result.MapBool[k] = nil
+					result.MapBool[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
 					result.MapBoolRemoved[k] = nil
 				} else if c.Type == ChangeType_Create {
-					result.MapBool[k] = nil
+					result.MapBool[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapBool[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}
@@ -258,15 +258,15 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
-					result.MapInt32Removed[k] = nil
+					result.MapInt32Removed[k] = &dataservice.ChangeDesc{}
 				} else {
-					result.MapInt32[k] = nil
+					result.MapInt32[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
-					result.MapInt32Removed[k] = nil
+					result.MapInt32Removed[k] = &dataservice.ChangeDesc{}
 				} else if c.Type == ChangeType_Create {
-					result.MapInt32[k] = nil
+					result.MapInt32[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapInt32[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}
@@ -282,15 +282,15 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
-					result.MapInt64Removed[k] = nil
+					result.MapInt64Removed[k] = &dataservice.ChangeDesc{}
 				} else {
-					result.MapInt64[k] = nil
+					result.MapInt64[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
-					result.MapInt64Removed[k] = nil
+					result.MapInt64Removed[k] = &dataservice.ChangeDesc{}
 				} else if c.Type == ChangeType_Create {
-					result.MapInt64[k] = nil
+					result.MapInt64[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapInt64[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}
@@ -306,15 +306,15 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			}
 			if mapField.GetMapValueType().GetMessageType() == nil {
 				if c.Type == ChangeType_Delete {
-					result.MapStringRemoved[k] = nil
+					result.MapStringRemoved[k] = &dataservice.ChangeDesc{}
 				} else {
-					result.MapString[k] = nil
+					result.MapString[k] = &dataservice.ChangeDesc{}
 				}
 			} else {
 				if c.Type == ChangeType_Delete {
-					result.MapStringRemoved[k] = nil
+					result.MapStringRemoved[k] = &dataservice.ChangeDesc{}
 				} else if c.Type == ChangeType_Create {
-					result.MapString[k] = nil
+					result.MapString[k] = &dataservice.ChangeDesc{}
 				} else {
 					result.MapString[k] = messageChangeMetaToProto(c, mapField.GetMapValueType().GetMessageType())
 				}
