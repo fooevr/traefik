@@ -72,7 +72,7 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 		logger.Fatal("parse regex `" + config.FullRegex + "` faield. " + err.Error())
 	}
 	// TODO: 配置后端地址
-	backend, err := grpc.Dial("127.0.0.1:8081", grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+	backend, err := grpc.Dial("127.0.0.1:8085", grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 	if err != nil {
 		logger.Error(err)
 	}
@@ -90,7 +90,7 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 	}
 	gserver := grpc.NewServer(grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 		grpc.CustomCodec(proxy.Codec()),
-		grpc.MaxRecvMsgSize(1024*1024*1024),
+		grpc.MaxRecvMsgSize(1024*1024*4),
 	)
 	result := &grpcHandle{
 		next: next,
@@ -189,7 +189,7 @@ func (a *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	methodDesc := a.rpcs[req.RequestURI]
 	if methodDesc == nil {
-		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("request URI"+req.RequestURI+" is not found"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("request URI "+req.RequestURI+" is not found"))
 		return
 	}
 	bts, _ := ioutil.ReadAll(req.Body)
