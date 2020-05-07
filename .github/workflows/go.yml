@@ -1,0 +1,17 @@
+name: Go
+
+on:
+  push:
+    branches: [ plugin ]
+  pull_request:
+    branches: [ plugin ]
+
+jobs:
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Set up Go 1.x
+      run: make build
