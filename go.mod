@@ -62,7 +62,6 @@ require (
 	github.com/mailgun/ttlmap v0.0.0-20170619185759-c1c17f74874f
 	github.com/miekg/dns v1.1.27
 	github.com/mitchellh/copystructure v1.0.0
-	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c // indirect
 	github.com/mwitkow/grpc-proxy v0.0.0-20181017164139-0f1106ef9c76
