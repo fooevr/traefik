@@ -55,7 +55,7 @@ func NewBuilder(configs map[string]*runtime.MiddlewareInfo, serviceBuilder servi
 }
 
 // BuildChain creates a middleware chain
-func (b *Builder) BuildChain(ctx context.Context, middlewares []string) *alice.Chain {
+func (b *Builder) BuildChain(ctx context.Context, middlewares []string, backends []string) *alice.Chain {
 	chain := alice.New()
 	for _, name := range middlewares {
 		middlewareName := provider.GetQualifiedName(ctx, name)
@@ -72,7 +72,7 @@ func (b *Builder) BuildChain(ctx context.Context, middlewares []string) *alice.C
 				return nil, err
 			}
 
-			constructor, err := b.buildConstructor(constructorContext, middlewareName)
+			constructor, err := b.buildConstructor(constructorContext, middlewareName, backends)
 			if err != nil {
 				b.configs[middlewareName].AddError(err, true)
 				return nil, err
@@ -102,7 +102,7 @@ func checkRecursion(ctx context.Context, middlewareName string) (context.Context
 }
 
 // it is the responsibility of the caller to make sure that b.configs[middlewareName].Middleware exists
-func (b *Builder) buildConstructor(ctx context.Context, middlewareName string) (alice.Constructor, error) {
+func (b *Builder) buildConstructor(ctx context.Context, middlewareName string, backends []string) (alice.Constructor, error) {
 	config := b.configs[middlewareName]
 	if config == nil || config.Middleware == nil {
 		return nil, fmt.Errorf("invalid middleware %q configuration", middlewareName)
@@ -342,7 +342,7 @@ func (b *Builder) buildConstructor(ctx context.Context, middlewareName string) (
 
 	if config.GRPCHandler != nil {
 		middleware = func(next http.Handler) (http.Handler, error) {
-			return grpchandle.New(ctx, next, *config.GRPCHandler, middlewareName)
+			return grpchandle.New(ctx, next, *config.GRPCHandler, middlewareName, backends)
 		}
 	}
 

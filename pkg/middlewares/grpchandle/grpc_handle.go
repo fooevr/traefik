@@ -57,10 +57,12 @@ type grpcHandle struct {
 	incrRegex       *regexp.Regexp
 	fullRegex       *regexp.Regexp
 	lockers         *gca.Cache
+
+	backendPool *GRPCConnectionPool
 }
 
 // New creates a new handler.
-func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, name string) (http.Handler, error) {
+func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, name string, backends []string) (http.Handler, error) {
 	logger := log.FromContext(middlewares.GetLoggerCtx(ctx, name, typeName))
 	logger.Debug("Creating middleware")
 	incrReg, err := regexp.Compile(config.IncrRegex)
@@ -71,11 +73,29 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 	if err != nil {
 		logger.Fatal("parse regex `" + config.FullRegex + "` faield. " + err.Error())
 	}
-	// TODO: 配置后端地址
-	backend, err := grpc.Dial("127.0.0.1:8085", grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
-	if err != nil {
-		logger.Error(err)
+
+	result := &grpcHandle{
+		next:      next,
+		name:      name,
+		messages:  map[string]*desc.MessageDescriptor{},
+		rpcs:      map[string]*desc.MethodDescriptor{},
+		cache:     config.Cache,
+		ttl:       time.Second * time.Duration(config.TTL),
+		incrRegex: incrReg,
+		fullRegex: fullReg,
+		lockers:   gca.New(time.Hour*10, time.Minute*10),
 	}
+	backendURLs := []string{}
+	for _, item := range backends {
+		idx := strings.Index(item, "//")
+		if idx >= 0 {
+			backendURLs = append(backendURLs, item[idx+2:])
+		} else {
+			backendURLs = append(backendURLs, item)
+		}
+	}
+	result.backendPool = NewPool(backendURLs)
+
 	director := func(ctx context.Context, fullMethodName string) (context.Context, *grpc.ClientConn, error) {
 		md, _ := metadata.FromIncomingContext(ctx)
 		outCtx, _ := context.WithCancel(ctx)
@@ -86,29 +106,23 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 		// https://github.com/improbable-eng/grpc-web/issues/568
 		delete(mdCopy, "connection")
 		outCtx = metadata.NewOutgoingContext(outCtx, mdCopy)
-		return outCtx, backend, nil
+		conn, err := result.backendPool.Get()
+		if err != nil {
+			logger.Error(err)
+			return nil, nil, err
+		}
+		return outCtx, conn, nil
 	}
-	gserver := grpc.NewServer(grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
+	result.grpc = grpc.NewServer(grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 		grpc.CustomCodec(proxy.Codec()),
 		grpc.MaxRecvMsgSize(1024*1024*4),
 	)
-	result := &grpcHandle{
-		next: next,
-		name: name,
-		grpc: gserver,
-		websocketWrapper: grpcweb.WrapServer(gserver, grpcweb.WithWebsockets(true), grpcweb.WithCorsForRegisteredEndpointsOnly(false), grpcweb.WithOriginFunc(func(origin string) bool {
-			return true
-		}), grpcweb.WithWebsocketOriginFunc(func(req *http.Request) bool {
-			return true
-		}), grpcweb.WithWebsocketPingInterval(time.Second*5), grpcweb.WithAllowedRequestHeaders([]string{"*"})),
-		messages:  map[string]*desc.MessageDescriptor{},
-		rpcs:      map[string]*desc.MethodDescriptor{},
-		cache:     config.Cache,
-		ttl:       time.Second * time.Duration(config.TTL),
-		incrRegex: incrReg,
-		fullRegex: fullReg,
-		lockers:   gca.New(time.Hour*10, time.Minute*10),
-	}
+	result.websocketWrapper = grpcweb.WrapServer(result.grpc, grpcweb.WithWebsockets(true), grpcweb.WithCorsForRegisteredEndpointsOnly(false), grpcweb.WithOriginFunc(func(origin string) bool {
+		return true
+	}), grpcweb.WithWebsocketOriginFunc(func(req *http.Request) bool {
+		return true
+	}), grpcweb.WithWebsocketPingInterval(time.Second*5), grpcweb.WithAllowedRequestHeaders([]string{"*"}))
+
 	if config.MaxVersionCount == 0 {
 		result.maxVersionCount = 200
 	}

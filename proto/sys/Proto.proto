@@ -1,0 +1,32 @@
+syntax = "proto3";
+package com.variflight.dataservice;
+import "google/protobuf/wrappers.proto";
+
+option csharp_namespace = "com.variflight.dataservice";
+option cc_enable_arenas = true;
+option go_package = "variflight.com/dataservice";
+option java_package = "com.variflight.dataservice";
+option java_multiple_files = false;
+option objc_class_prefix = "DS";
+
+// 服务端接口参数
+message Proto{
+    // 当前服务端版本
+    string version = 1;
+    // protobuf文件<文件相对路径, 文件内容base64编码>
+    map<string, string> files = 2;
+    // 不缓存rpc name前缀, default: ""
+    google.protobuf.StringValue NoCachePrefix = 3;
+    // 全量缓存rpc name前缀, default: "fc_"
+    google.protobuf.StringValue FullCachePrefix = 4;
+    // 增量缓存rpc name前缀, default: "ic_"
+    google.protobuf.StringValue IncrementCachePrefix = 5;
+    // 默认缓存有效期
+    int32 defaultTTL = 6;
+    // 默认最大缓存版本数
+    int32 defaultMaxVersion = 7;
+    // 可精确控制的rpc有效期<rpcName, ttl>
+    map<string, int32> ttls = 8;
+    // 可精确控制的rpc版本数<rpcName, versionCount>
+    map<string, int32> maxVersions = 9;
+}

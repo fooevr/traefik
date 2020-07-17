@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/containous/alice"
 	"github.com/containous/traefik/v2/pkg/config/runtime"
@@ -21,7 +22,7 @@ const (
 )
 
 type middlewareBuilder interface {
-	BuildChain(ctx context.Context, names []string) *alice.Chain
+	BuildChain(ctx context.Context, names []string, backends []string) *alice.Chain
 }
 
 type responseModifierBuilder interface {
@@ -187,7 +188,17 @@ func (m *Manager) buildHTTPHandler(ctx context.Context, router *runtime.RouterIn
 		return nil, err
 	}
 
-	mHandler := m.middlewaresBuilder.BuildChain(ctx, router.Middlewares)
+	var backends []string
+	for name, service := range m.conf.Services {
+		if strings.HasPrefix(name, router.Service+"@") {
+			for _, server := range service.LoadBalancer.Servers {
+				backends = append(backends, server.URL)
+			}
+			break
+		}
+	}
+
+	mHandler := m.middlewaresBuilder.BuildChain(ctx, router.Middlewares, backends)
 
 	tHandler := func(next http.Handler) (http.Handler, error) {
 		return tracing.NewForwarder(ctx, routerName, router.Service, next), nil
