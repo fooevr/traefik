@@ -62,7 +62,6 @@ func (f *RouterFactory) CreateRouters(conf dynamic.Configuration) (map[string]*t
 	ctx := context.Background()
 
 	rtConf := runtime.NewConfig(conf)
-
 	// HTTP
 	serviceManager := f.managerFactory.Build(rtConf)
 

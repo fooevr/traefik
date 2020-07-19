@@ -16,7 +16,6 @@ import (
 
 // Middleware holds the Middleware configuration.
 type Middleware struct {
-	GRPCWeb           *GRPCWeb           `json:"grpcWeb,omitempty" toml:"grpcWeb,omitempty" yaml:"grpcWeb,omitempty"`
 	GRPCHandler       *GRPCHandler       `json:"grpcHandler,omitempty" toml:"grpcHandler,omitempty" yaml:"grpcHandler,omitempty"`
 	AddPrefix         *AddPrefix         `json:"addPrefix,omitempty" toml:"addPrefix,omitempty" yaml:"addPrefix,omitempty"`
 	StripPrefix       *StripPrefix       `json:"stripPrefix,omitempty" toml:"stripPrefix,omitempty" yaml:"stripPrefix,omitempty"`
@@ -348,15 +347,12 @@ func (r *RateLimit) SetDefaults() {
 
 // GRPCHandler handle grpc request
 type GRPCHandler struct {
-	Desc            string `json:"desc,omitempty" toml:"desc,omitempty" yaml:"desc,omitempty" export:"true"`
-	Cache           bool   `json:"cache,omitempty" toml:"cache,omitempty" yaml:"cache,omitempty" export:"true"`
-	TTL             int64  `json:"ttl,omitempty" toml:"ttl,omitempty" yaml:"ttl,omitempty" export:"true"`
-	MaxVersionCount int    `json:"maxversioncount,omitempty" toml:"maxversioncount,omitempty" yaml:"maxversioncount,omitempty" export:"true"`
-	IncrRegex       string `json:"incrRegex,omitempty" toml:"incrRegex,omitempty" yaml:"incrRegex,omitempty" export:"true"`
-	FullRegex       string `json:"fullRegex,omitempty" toml:"fullRegex,omitempty" yaml:"fullRegex,omitempty" export:"true"`
-}
-
-type GRPCWeb struct {
+	//Desc            string `json:"desc,omitempty" toml:"desc,omitempty" yaml:"desc,omitempty" export:"true"`
+	//Cache           bool   `json:"cache,omitempty" toml:"cache,omitempty" yaml:"cache,omitempty" export:"true"`
+	//TTL             int64  `json:"ttl,omitempty" toml:"ttl,omitempty" yaml:"ttl,omitempty" export:"true"`
+	//MaxVersionCount int    `json:"maxversioncount,omitempty" toml:"maxversioncount,omitempty" yaml:"maxversioncount,omitempty" export:"true"`
+	//IncrRegex       string `json:"incrRegex,omitempty" toml:"incrRegex,omitempty" yaml:"incrRegex,omitempty" export:"true"`
+	//FullRegex       string `json:"fullRegex,omitempty" toml:"fullRegex,omitempty" yaml:"fullRegex,omitempty" export:"true"`
 }
 
 // +k8s:deepcopy-gen=true

@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/ghodss/yaml"
+	"github.com/spf13/viper"
+	"io/ioutil"
 	stdlog "log"
 	"net/http"
 	"os"
@@ -39,6 +43,25 @@ import (
 )
 
 func main() {
+	viper.AutomaticEnv()
+	fmt.Print("config backends: ")
+	fmt.Println(strings.Split(viper.GetString("BACKENDS"), ","))
+	f, _ := ioutil.ReadFile("./conf/grpc.yaml")
+	var data map[string]interface{}
+	yaml.Unmarshal(f, &data)
+	http := data["http"].(map[string]interface{})
+	services := http["services"].(map[string]interface{})
+	grpc := services["grpc"].(map[string]interface{})
+	lb := grpc["loadBalancer"].(map[string]interface{})
+	servers := []interface{}{}
+	backends := strings.Split(viper.GetString("BACKENDS"), ",")
+	for _, item := range backends {
+		servers = append(servers, map[string]string{"url": strings.Trim(item, " ")})
+	}
+	lb["servers"] = servers
+	newdata, _ := yaml.Marshal(data)
+	ioutil.WriteFile("./conf/grpc.yaml", newdata, os.ModePerm)
+
 	// traefik config inits
 	tConfig := cmd.NewTraefikConfiguration()
 

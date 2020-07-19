@@ -4,7 +4,7 @@ package com.variflight.dataservice;
 
 option csharp_namespace = "com.variflight.dataservice";
 option cc_enable_arenas = true;
-option go_package = "variflight.com/dataservice";
+option go_package = "com/variflight/dataservice";
 option java_package = "com.variflight.dataservice";
 option java_multiple_files = false;
 option objc_class_prefix = "DS";

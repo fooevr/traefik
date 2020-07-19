@@ -45,11 +45,17 @@ type cacheItem struct {
 	ttl           int64
 }
 
-type cacheManager struct {
+type CacheManager struct {
 	c *gca.Cache
 }
 
-func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit bool) {
+func NewCacheManager() *CacheManager {
+	return &CacheManager{
+		c: gca.New(time.Millisecond*0, time.Minute*1),
+	}
+}
+
+func (m *CacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit bool) {
 	cd, ext, hit := m.c.GetWithExpiration(id)
 	if ext.Unix() < time.Now().Unix() {
 		return nil, false
@@ -57,7 +63,7 @@ func (m *cacheManager) GetNoVersionCache(id string, ttl int64) (bts []byte, hit 
 	return cd.([]byte), hit
 }
 
-func (m *cacheManager) GetVersionFullCache(id string) (msg *dynamic.Message, changeType ChangeType, newVersion int64, hit bool) {
+func (m *CacheManager) GetVersionFullCache(id string) (msg *dynamic.Message, changeType ChangeType, newVersion int64, hit bool) {
 	cd, hit := m.c.Get(id)
 	if !hit {
 		return nil, ChangeType_Unchange, 0, false
@@ -69,7 +75,7 @@ func (m *cacheManager) GetVersionFullCache(id string) (msg *dynamic.Message, cha
 	return ci.val.(*dynamic.Message), ChangeType_Create, ci.latestVersion, true
 }
 
-func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, ct ChangeType, changeDesc *dataservice.ChangeDesc, newVersion int64, hit bool) {
+func (m *CacheManager) GetVersionCache(id string, version int64) (msg *dynamic.Message, ct ChangeType, changeDesc *dataservice.ChangeDesc, newVersion int64, hit bool) {
 	cd, hit := m.c.Get(id)
 	if !hit {
 		return nil, ChangeType_Unchange, nil, 0, false
@@ -118,11 +124,11 @@ func (m *cacheManager) GetVersionCache(id string, version int64) (msg *dynamic.M
 	return resultData, resultChange.Type, messageChangeMetaToProto(resultChange, ci.messageDesc), ci.latestVersion, true
 }
 
-func (m *cacheManager) SetNoVersionCache(id string, data []byte, ttl int64) {
+func (m *CacheManager) SetNoVersionCache(id string, data []byte, ttl int64) {
 	m.c.Set(id, data, time.Duration(ttl)*time.Millisecond)
 }
 
-func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.Message, messageDesc *desc.MessageDescriptor, ttl int64, maxVersionCount int) {
+func (m *CacheManager) SetVersionCache(id string, version int64, data *dynamic.Message, messageDesc *desc.MessageDescriptor, ttl int64, maxVersionCount int64) {
 	ci, hit := m.c.Get(id)
 	if !hit {
 		ci = &cacheItem{
@@ -165,10 +171,6 @@ func (m *cacheManager) SetVersionCache(id string, version int64, data *dynamic.M
 		ci.(*cacheItem).latestVersion = version
 		ci.(*cacheItem).val = data
 	}
-}
-
-var CacheManager = &cacheManager{
-	c: gca.New(time.Millisecond*0, time.Minute*1),
 }
 
 // 将ChangeMeta映射未ChangeDesc proto.

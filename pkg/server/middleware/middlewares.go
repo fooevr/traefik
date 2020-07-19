@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/containous/traefik/v2/pkg/middlewares/grpchandle"
-	"github.com/containous/traefik/v2/pkg/middlewares/grpcweb"
 	"net/http"
 	"strings"
 
@@ -343,12 +342,6 @@ func (b *Builder) buildConstructor(ctx context.Context, middlewareName string, b
 	if config.GRPCHandler != nil {
 		middleware = func(next http.Handler) (http.Handler, error) {
 			return grpchandle.New(ctx, next, *config.GRPCHandler, middlewareName, backends)
-		}
-	}
-
-	if config.GRPCWeb != nil {
-		middleware = func(next http.Handler) (http.Handler, error) {
-			return grpcweb.New(ctx, next, *config.GRPCWeb, middlewareName)
 		}
 	}
 

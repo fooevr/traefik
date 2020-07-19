@@ -1,11 +1,11 @@
 syntax = "proto3";
 import "google/protobuf/wrappers.proto";
-package com.variflight.dataservice.test;
+package com.variflight.dataservice.declare;
 
-option csharp_namespace = "com.variflight.dataservice.cache.test";
+option csharp_namespace = "com.variflight.dataservice.declares";
 option cc_enable_arenas = true;
-option go_package = "variflight.com/dataservice/test";
-option java_package = "com.variflight.dataservice.cache.test";
+option go_package = "com/variflight/dataservice/declares";
+option java_package = "com.variflight.dataservice.declare";
 option java_multiple_files = false;
 option objc_class_prefix = "DSC";
 

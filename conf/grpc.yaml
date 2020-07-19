@@ -1,0 +1,46 @@
+http:
+  middlewares:
+    compress:
+      compress: {}
+    grpc:
+      grpcHandler: {}
+    header:
+      headers:
+        accessControlAllowHeaders:
+        - x-grpc-web
+        - x-user-agent
+        - content-type
+        - ts
+        - keep-alive
+        - user-agent
+        - cache-control
+        - content-transfer-encoding
+        - custom-header-1
+        - x-accept-content-transfer-encoding
+        - x-accept-response-streaming
+        - grpc-timeout
+        accessControlAllowMethods:
+        - GET
+        - OPTIONS
+        - PUT
+        - POST
+        accessControlAllowOrigin: '*'
+        accessControlContentType:
+        - application/grpc-web-text
+        accessControlMaxAge: 100
+        addVaryHeader: true
+  routers:
+    traefik-dashboard:
+      entryPoints:
+      - web
+      middlewares:
+      - grpc
+      - compress
+      - header
+      rule: PathPrefix(`/`)
+      service: grpc
+  services:
+    grpc:
+      loadBalancer:
+        servers:
+        - url: h2c://127.0.0.1:8081
