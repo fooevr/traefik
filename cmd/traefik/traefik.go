@@ -64,6 +64,7 @@ func main() {
 
 	// traefik config inits
 	tConfig := cmd.NewTraefikConfiguration()
+	tConfig.Log.Level = viper.GetString("LOG_LEVEL")
 
 	loaders := []cli.ResourceLoader{&cli.FileLoader{}, &cli.FlagLoader{}, &cli.EnvLoader{}}
 

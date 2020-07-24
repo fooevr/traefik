@@ -23,7 +23,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/docker/cli v0.0.0-20200221155518-740919cc7fc0
-	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v0.0.0-00010101000000-000000000000
 	github.com/docker/docker-credential-helpers v0.6.3 // indirect
 	github.com/docker/go-connections v0.4.0
@@ -42,7 +42,7 @@ require (
 	github.com/go-acme/lego/v3 v3.5.0
 	github.com/go-check/check v0.0.0-00010101000000-000000000000
 	github.com/go-kit/kit v0.9.0
-	github.com/gogo/protobuf v1.3.0
+	github.com/gogo/protobuf v1.3.0 // indirect
 	github.com/golang/protobuf v1.3.4
 	github.com/google/go-github/v28 v28.1.1
 	github.com/googleapis/gnostic v0.1.0 // indirect
@@ -52,16 +52,16 @@ require (
 	github.com/hashicorp/go-version v1.2.0
 	github.com/huandu/xstrings v1.2.0 // indirect
 	github.com/improbable-eng/grpc-web v0.12.0
-	github.com/imroc/biu v0.0.0-20170329141542-0376ce6761c0
 	github.com/influxdata/influxdb1-client v0.0.0-20190809212627-fc22c7df067e
 	github.com/instana/go-sensor v1.5.1
-	github.com/jhump/protoreflect v1.6.0
+	github.com/jhump/protoreflect v1.7.0
 	github.com/libkermit/compose v0.0.0-20171122111507-c04e39c026ad
 	github.com/libkermit/docker v0.0.0-20171122101128-e6674d32b807
 	github.com/libkermit/docker-check v0.0.0-20171122104347-1113af38e591
 	github.com/mailgun/ttlmap v0.0.0-20170619185759-c1c17f74874f
 	github.com/miekg/dns v1.1.27
 	github.com/mitchellh/copystructure v1.0.0
+	github.com/mitchellh/gox v1.0.1 // indirect
 	github.com/mitchellh/hashstructure v1.0.0
 	github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c // indirect
 	github.com/mwitkow/grpc-proxy v0.0.0-20181017164139-0f1106ef9c76
@@ -114,7 +114,9 @@ replace github.com/docker/docker => github.com/docker/engine v1.4.2-0.2020020422
 replace (
 	github.com/abbot/go-http-auth => github.com/containous/go-http-auth v0.4.1-0.20200324110947-a37a7636d23e
 	github.com/go-check/check => github.com/containous/check v0.0.0-20170915194414-ca0bf163426a
+	github.com/golang/protobuf => github.com/golang/protobuf v1.3.4
 	github.com/gorilla/mux => github.com/containous/mux v0.0.0-20181024131434-c33f32e26898
 	github.com/mailgun/minheap => github.com/containous/minheap v0.0.0-20190809180810-6e71eb837595
 	github.com/mailgun/multibuf => github.com/containous/multibuf v0.0.0-20190809014333-8b6c9a7e6bba
+	google.golang.org/grpc => google.golang.org/grpc v1.27.1
 )

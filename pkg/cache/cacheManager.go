@@ -1,7 +1,7 @@
 package cache
 
 import (
-	"github.com/containous/traefik/v2/pkg/cache/proto/sys"
+	dataservice "github.com/containous/traefik/v2/pkg/cache/proto"
 	sll "github.com/emirpasic/gods/lists/singlylinkedlist"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
@@ -97,12 +97,12 @@ func (m *CacheManager) GetVersionCache(id string, version int64) (msg *dynamic.M
 	for i := cursorIdx + 1; i < ci.versions.Size(); i++ {
 		version, ok := ci.versions.Get(i)
 		if !ok {
-			log.Panic("缓存和版本索引不匹配")
+			log.Fatal("缓存和版本索引不匹配")
 		}
 		cacheChange, ok := ci.c.Get(strconv.FormatInt(version.(int64), 10))
 		change := cacheChange.(*ChangeMeta)
 		if !ok {
-			log.Panic("缓存和版本索引不匹配")
+			log.Fatal("缓存和版本索引不匹配")
 		}
 		if change.Type == ChangeType_Unchange {
 			continue
@@ -226,6 +226,7 @@ func messageChangeMetaToProto(msgChange *ChangeMeta, messageDesc *desc.MessageDe
 
 func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *dataservice.ChangeDesc {
 	result := &dataservice.ChangeDesc{}
+	isValueField := mapField.GetMapValueType().GetMessageType() == nil || strings.HasPrefix(mapField.GetMapValueType().GetMessageType().GetFullyQualifiedName(), "google.protobuf.")
 	if mapField.GetMapKeyType().GetType() == descriptor.FieldDescriptorProto_TYPE_BOOL {
 		for k, c := range change.MapBool {
 			if result.MapBool == nil {
@@ -234,7 +235,7 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			if result.MapBoolRemoved == nil {
 				result.MapBoolRemoved = map[bool]*dataservice.ChangeDesc{}
 			}
-			if mapField.GetMapValueType().GetMessageType() == nil {
+			if isValueField {
 				if c.Type == ChangeType_Delete {
 					result.MapBoolRemoved[k] = &dataservice.ChangeDesc{}
 				} else {
@@ -258,7 +259,7 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			if result.MapInt32Removed == nil {
 				result.MapInt32Removed = map[int32]*dataservice.ChangeDesc{}
 			}
-			if mapField.GetMapValueType().GetMessageType() == nil {
+			if isValueField {
 				if c.Type == ChangeType_Delete {
 					result.MapInt32Removed[k] = &dataservice.ChangeDesc{}
 				} else {
@@ -282,7 +283,7 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			if result.MapInt64Removed == nil {
 				result.MapInt64Removed = map[int64]*dataservice.ChangeDesc{}
 			}
-			if mapField.GetMapValueType().GetMessageType() == nil {
+			if isValueField {
 				if c.Type == ChangeType_Delete {
 					result.MapInt64Removed[k] = &dataservice.ChangeDesc{}
 				} else {
@@ -306,7 +307,7 @@ func mapChangeMetaToProto(change *ChangeMeta, mapField *desc.FieldDescriptor) *d
 			if result.MapStringRemoved == nil {
 				result.MapStringRemoved = map[string]*dataservice.ChangeDesc{}
 			}
-			if mapField.GetMapValueType().GetMessageType() == nil {
+			if isValueField {
 				if c.Type == ChangeType_Delete {
 					result.MapStringRemoved[k] = &dataservice.ChangeDesc{}
 				} else {

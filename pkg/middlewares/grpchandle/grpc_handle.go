@@ -12,11 +12,12 @@ import (
 	"fmt"
 	"github.com/containous/traefik/v2/pkg/cache"
 	_ "github.com/containous/traefik/v2/pkg/cache"
-	dataservice "github.com/containous/traefik/v2/pkg/cache/proto/sys"
+	vfasys "github.com/containous/traefik/v2/pkg/cache/proto"
 	"github.com/containous/traefik/v2/pkg/config/dynamic"
 	"github.com/containous/traefik/v2/pkg/log"
 	"github.com/containous/traefik/v2/pkg/middlewares"
 	"github.com/containous/traefik/v2/pkg/tracing"
+	"github.com/docker/distribution/uuid"
 	"github.com/golang/protobuf/proto"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
@@ -66,22 +67,24 @@ type grpcHandle struct {
 	lockers *gca.Cache
 
 	backends      []string
-	logger        *log.Logger
+	logger        log.Logger
 	protoUpdating int32
+	_id           string
 }
 
 // New creates a new handler.
 func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, name string, backends []string) (http.Handler, error) {
 	logger := log.FromContext(middlewares.GetLoggerCtx(ctx, name, typeName))
-	logger.Debug("Creating middleware")
+	logger.Info("Creating middleware")
 
 	result := &grpcHandle{
-		logger:   &logger,
+		logger:   logger,
 		next:     next,
 		name:     name,
 		messages: map[string]*desc.MessageDescriptor{},
 		rpcs:     map[string]*desc.MethodDescriptor{},
 		lockers:  gca.New(time.Hour*10, time.Minute*10),
+		_id:      uuid.Generate().String(),
 	}
 	backendURLs := []string{}
 	for _, item := range backends {
@@ -104,7 +107,7 @@ func New(ctx context.Context, next http.Handler, config dynamic.GRPCHandler, nam
 		// https://github.com/improbable-eng/grpc-web/issues/568
 		delete(mdCopy, "connection")
 		outCtx = metadata.NewOutgoingContext(outCtx, mdCopy)
-		bk, err := grpc.Dial("127.0.0.1:8080", grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
+		bk, err := grpc.Dial("10.9.9.131:8080", grpc.WithInsecure(), grpc.WithCodec(proxy.Codec()))
 		if err != nil {
 			logger.Error(err)
 			return nil, nil, err
@@ -145,7 +148,7 @@ func (this *grpcHandle) renewProto() {
 		return
 	}
 	defer conn.Close()
-	client := dataservice.NewProtoClient(conn)
+	client := vfasys.NewProtoClient(conn)
 	resp, err := client.GetProtoDescription(context.Background(), &empty.Empty{})
 	if err != nil {
 		return
@@ -156,7 +159,7 @@ func (this *grpcHandle) renewProto() {
 	parser := protoparse.Parser{}
 	protos := []*desc.FileDescriptor{}
 	fileNames := []string{}
-	for name, item := range resp.Files {
+	for name, item := range resp.ProtoFiles {
 		dir := filepath.Dir("/tmp/" + name)
 		os.MkdirAll(dir, os.ModePerm)
 		ioutil.WriteFile("/tmp/"+name, item, os.ModePerm)
@@ -164,7 +167,7 @@ func (this *grpcHandle) renewProto() {
 	}
 	ps, err := parser.ParseFiles(fileNames...)
 	if err != nil {
-		(*this.logger).Warn(err)
+		this.logger.Warn(err)
 		return
 	}
 	protos = append(protos, ps...)
@@ -180,7 +183,7 @@ func (this *grpcHandle) renewProto() {
 
 	ps, err = parser.ParseFiles(fileNames...)
 	if err != nil {
-		(*this.logger).Warn(err)
+		this.logger.Warn(err)
 		return
 	}
 	protos = append(protos, ps...)
@@ -232,7 +235,6 @@ func (this *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		this.next.ServeHTTP(rw, req)
 		return
 	}
-
 	if atomic.LoadInt32(&this.protoUpdating) == 1 {
 		rw.WriteHeader(503)
 		this.next.ServeHTTP(rw, req)
@@ -260,23 +262,23 @@ func (this *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	var clientVersion int64
 	if req.Header.Get("ts") == "" {
-		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("miss ts header"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("miss ts header"), this.logger)
 		return
 	}
 	if v, err := strconv.ParseInt(req.Header.Get("ts"), 10, 64); err != nil {
-		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("ts header not int64"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("ts header not int64"), this.logger)
 	} else {
 		clientVersion = v
 	}
 
 	methodDesc := this.rpcs[req.RequestURI]
 	if methodDesc == nil {
-		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("request URI "+req.RequestURI+" is not found"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("request URI "+req.RequestURI+" is not found"), this.logger)
 		return
 	}
 	bts, _ := ioutil.ReadAll(req.Body)
 	if len(bts) < 5 {
-		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("parse body to gRPC failed"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 5, errors.New("parse body to gRPC failed"), this.logger)
 		return
 	}
 	frame := bts[5:]
@@ -297,18 +299,21 @@ func (this *grpcHandle) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	code, msg := this.setCache(cacheId, locker.(*sync.RWMutex), bts, req, methodDesc, this, isIncrCache, logger)
+	code, msg := this.setCache(cacheId, locker.(*sync.RWMutex), bts, req, rw, methodDesc, this, isIncrCache, logger)
+	if code == 1000 {
+		return
+	}
 	if code == 503 {
 		rw.WriteHeader(503)
 		this.next.ServeHTTP(rw, req)
 		return
 	}
 	if code != 0 {
-		response(rw, nil, cache.ChangeType_Unchange, 0, nil, code, errors.New(msg))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, code, errors.New(msg), this.logger)
 		return
 	}
 	if !this.getCache(locker.(*sync.RWMutex), isIncrCache, cacheId, clientVersion, rw) {
-		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 13, errors.New("set cache error"))
+		response(rw, nil, cache.ChangeType_Unchange, 0, nil, 13, errors.New("set cache error"), this.logger)
 	} else {
 		//this.next.ServeHTTP(rw, req)
 	}
@@ -323,39 +328,38 @@ func (this *grpcHandle) getCache(locker *sync.RWMutex, isIncr bool, cacheId stri
 		if hit {
 			cacheBytes, err := c.Marshal()
 			if err != nil {
-				response(rw, nil, cache.ChangeType_Unchange, 0, nil, 13, err)
+				response(rw, nil, cache.ChangeType_Unchange, 0, nil, 13, err, this.logger)
 				return false
 			}
-			response(rw, cacheBytes, ct, version, change, 0, nil)
+			this.logger.Debug("body: ")
+			this.logger.Debug(c)
+			response(rw, cacheBytes, ct, version, change, 0, nil, this.logger)
 			return true
 		}
 	} else {
 		bts, hit := this.cacheManager.GetNoVersionCache(cacheId, time.Now().Unix())
 		if hit {
-			//rw.Write(bts)
-			//rw.Header().Add("Trailer:Grpc-Status", "0")
-			//rw.WriteHeader(200)
-			response(rw, bts[5:], cache.ChangeType_Create, 1, nil, 0, nil)
+			response(rw, bts[5:], cache.ChangeType_Create, 1, nil, 0, nil, this.logger)
 			return true
 		}
 	}
 	return false
 }
 
-func (this *grpcHandle) setCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http.Request, methodDesc *desc.MethodDescriptor, a *grpcHandle, isIncr bool, logger log.Logger) (int, string) {
+func (this *grpcHandle) setCache(cacheId string, locker *sync.RWMutex, reqBytes []byte, req *http.Request, rw http.ResponseWriter, methodDesc *desc.MethodDescriptor, a *grpcHandle, isIncr bool, logger log.Logger) (int, string) {
 	locker.Lock()
 	defer locker.Unlock()
 	req.Body = ioutil.NopCloser(bytes.NewReader(reqBytes))
 	newRw := &cacheResponse{
 		cacheId: "",
 		buffer:  &bytes.Buffer{},
-		header:  map[string][]string{},
+		header:  rw.Header(),
 	}
-	a.next.ServeHTTP(newRw, req)
-	//protoVersion := newRw.Header().Get("Proto-Version")
-	//if protoVersion != this.currentVersion{
-	//	return 503, ""
-	//}
+	this.next.ServeHTTP(newRw, req)
+	protoVersion := newRw.Header().Get("Proto-Version")
+	if protoVersion != this.currentVersion {
+		return 503, ""
+	}
 	grpcStatus, _ := strconv.Atoi(newRw.header.Get("Grpc-Status"))
 	if grpcStatus != 0 {
 		return grpcStatus, newRw.header.Get("Grpc-Message")
@@ -364,7 +368,7 @@ func (this *grpcHandle) setCache(cacheId string, locker *sync.RWMutex, reqBytes 
 		msg := dynamicProto.NewMessage(methodDesc.GetOutputType())
 		err := msg.Unmarshal(newRw.buffer.Bytes()[5:])
 		if err != nil {
-			logger.Errorf("can't parse response bytes to message.")
+			this.logger.Error("can't parse response bytes to message.")
 			return 3, "can't parse response bytes to message."
 		}
 		this.cacheManager.SetVersionCache(cacheId, time.Now().Unix(), msg, methodDesc.GetOutputType(), a.ttl*1000, a.maxVersionCount)
@@ -374,7 +378,7 @@ func (this *grpcHandle) setCache(cacheId string, locker *sync.RWMutex, reqBytes 
 	return 0, ""
 }
 
-func response(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, version int64, change *dataservice.ChangeDesc, code int, err error) {
+func response(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, version int64, change *vfasys.ChangeDesc, code int, err error, logger log.Logger) {
 	buffer := &bytes.Buffer{}
 	buffer.Write([]byte{0})
 	length := make([]byte, 4)
@@ -385,11 +389,14 @@ func response(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, ver
 	}
 	buffer.Write(length)
 	buffer.Write(resultBts)
-	rw.Header().Add("Content-Type", "application/grpc")
-	rw.Header().Add("Grpc-Accept-Encoding", "gzip")
-	rw.Header().Add("Grpc-Encoding", "identity")
-	rw.Header().Add("Trailer:Grpc-Status", strconv.Itoa(code))
-	rw.Header().Add("ts", strconv.FormatInt(version, 10))
+	//chunk := httputil.NewChunkedWriter(rw)
+	rw.Header().Set("Content-Type", "application/grpc")
+	rw.Header().Set("Grpc-Accept-Encoding", "gzip")
+	rw.Header().Set("Grpc-Encoding", "identity")
+	rw.Header().Set("Trailer:Grpc-Status", strconv.Itoa(code))
+	rw.Header().Set("ts", strconv.FormatInt(version, 10))
+	rw.Header().Set("Vary", "Origin")
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
 	if change != nil {
 		cmBts, err := proto.Marshal(change)
 		if err != nil {
@@ -404,14 +411,21 @@ func response(rw http.ResponseWriter, resultBts []byte, ct cache.ChangeType, ver
 			}
 			return
 		}
-		rw.Header().Add("cd-bin", base64.StdEncoding.EncodeToString(cmBts))
+		logger.Debug("cd-bin ")
+		logger.Debug(proto.MarshalTextString(change))
+		rw.Header().Set("cd-bin", base64.StdEncoding.EncodeToString(cmBts))
 	}
 	if err != nil {
-		rw.Header().Add("rs", err.Error())
+		rw.Header().Set("rs", err.Error())
 	}
-	rw.Header().Add("ct-bin", base64.StdEncoding.EncodeToString([]byte{byte(ct)}))
+	logger.Debug("ct-bin ")
+	logger.Debug(ct)
+	rw.Header().Set("ct-bin", base64.StdEncoding.EncodeToString([]byte{byte(ct)}))
+	rw.Header().Set("Transfer-Encoding", "chunked")
 	rw.WriteHeader(200)
 	rw.Write(buffer.Bytes())
+	rw.(http.Flusher).Flush()
+	rw.WriteHeader(200)
 }
 
 type cacheResponse struct {

@@ -30,13 +30,13 @@ http:
         accessControlMaxAge: 100
         addVaryHeader: true
   routers:
-    traefik-dashboard:
+    grpc-proxy:
       entryPoints:
       - web
       middlewares:
       - grpc
-      - compress
       - header
+      - compress
       rule: PathPrefix(`/`)
       service: grpc
   services:

@@ -1,21 +1,23 @@
 syntax = "proto3";
-package com.variflight.dataservice;
+
+package vfasys;
+
+option csharp_namespace = "vfasys";
+option cc_enable_arenas = true;
+option go_package = "proto;vfasys";
+option java_package = "vfasys";
+option java_multiple_files = false;
+option objc_class_prefix = "vfasys";
+
 import "google/protobuf/wrappers.proto";
 import "google/protobuf/empty.proto";
-
-option csharp_namespace = "com.variflight.dataservice";
-option cc_enable_arenas = true;
-option go_package = "com/variflight/dataservice";
-option java_package = "com.variflight.dataservice";
-option java_multiple_files = false;
-option objc_class_prefix = "DS";
 
 // 服务端接口参数
 message ProtoDesc{
     // 当前服务端版本
     string version = 1;
     // protobuf文件<文件相对路径, 文件内容base64编码>
-    map<string, bytes> files = 2;
+    map<string, bytes> protoFiles = 2;
     // 不缓存rpc name前缀, default: "nc_"
     google.protobuf.StringValue NoCachePrefix = 3;
     // 全量缓存rpc name前缀, default: "fc_"

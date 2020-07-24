@@ -83,7 +83,8 @@ func mergeAndDiffMap(oldMessage, incrMessage *dynamic.Message, mapField *desc.Fi
 			c = &ChangeMeta{Type: ChangeType_Delete}
 		} else {
 			// updated
-			if mapField.GetMapValueType().GetMessageType() != nil {
+			if mapField.GetMapValueType().GetMessageType() != nil &&
+				!strings.HasPrefix(mapField.GetMapValueType().GetMessageType().GetFullyQualifiedName(), "google.protobuf.") {
 				c = mergeAndDiffMessage(val.(*dynamic.Message), nv.(*dynamic.Message))
 			} else {
 				if nv != val {
@@ -240,7 +241,7 @@ func getIncrementalMap(fullMessage *dynamic.Message, incrMessage *dynamic.Messag
 		} else if change.Type == ChangeType_Delete {
 			incrMessage.RemoveMapField(field, key)
 		} else if change.Type == ChangeType_Update {
-			if field.GetMapValueType().GetMessageType() != nil {
+			if field.GetMapValueType().GetMessageType() != nil && !strings.HasPrefix(field.GetMapValueType().GetMessageType().GetFullyQualifiedName(), "google.protobuf.") {
 				var incrMapValue = incrMessage.GetMapField(field, key)
 				if incrMessage.GetMapField(field, key) == nil {
 					incrMapValue = dynamic.NewMessage(field.GetMapValueType().GetMessageType())
